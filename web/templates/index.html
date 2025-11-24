@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dama ML Viewer</title>
+    <link rel="stylesheet" href="/static/board.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Dama ML Game Viewer</h1>
+
+        <div id="scoreboard">
+            <div id="agents">
+                <div id="red-agent">Red (Player 1) – ?</div>
+                <div id="white-agent">White (Player 2) – ?</div>
+            </div>
+            <div id="counts">
+                <div id="red-counts">Red: 0 pieces, 0 kings</div>
+                <div id="white-counts">White: 0 pieces, 0 kings</div>
+            </div>
+            <div id="turn">Turn: ?</div>
+        </div>
+
+        <div class="buttons">
+            <button onclick="startGame('random_vs_rl')">Random vs RL</button>
+            <button onclick="startGame('rl_vs_hybrid')">RL vs Hybrid</button>
+            <button onclick="startGame('hybrid_vs_hybrid')">Hybrid vs Hybrid</button>
+            <button onclick="stepGame()">Play Step</button>
+        </div>
+
+        <canvas id="boardCanvas" width="480" height="480"></canvas>
+    </div>
+
+    <script src="/static/board.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+models/*.pkl
+q_table.pkl
+*.pyc
