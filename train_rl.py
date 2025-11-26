@@ -4,18 +4,17 @@ import pickle
 
 from dama_env.env import DamaEnv
 from agents.random_agent import RandomAgent
-from agents.rl_agent import QLearningAgent, RLAgent
+from agents.rl_agent import QLearningAgent, RLAgent, DEFAULT_RL_QTABLE
 from agents.hybrid_agent import HybridAgent
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-MODELS_DIR = os.path.join(BASE_DIR, "models")
-RL_MODEL_PATH = os.path.join(MODELS_DIR, "rl_q_table.pkl")
+RL_MODEL_PATH = DEFAULT_RL_QTABLE
 LEGACY_PATH = os.path.join(BASE_DIR, "q_table.pkl")
 
 
 def ensure_models_dir():
-    if not os.path.exists(MODELS_DIR):
-        os.makedirs(MODELS_DIR, exist_ok=True)
+    if RL_MODEL_PATH:
+        os.makedirs(os.path.dirname(RL_MODEL_PATH), exist_ok=True)
 
 
 def load_table():
@@ -35,15 +34,14 @@ def opponent_from_type(opponent, rl_q):
         return HybridAgent(player=-1, q_table=rl_q)
     if opponent == "rl":
         # simple mirror RL as fixed policy; does not learn
-        return RLAgent(player=-1, q_table=rl_q)
+        return RLAgent(player=-1, q_table=rl_q, q_table_path=RL_MODEL_PATH)
     raise ValueError(f"Unknown opponent type: {opponent}")
 
 
 def train(opponent="random", episodes=2000):
     ensure_models_dir()
     init_q = load_table()
-    rl_agent = QLearningAgent(player=1, alpha=0.1, gamma=0.99, epsilon=0.2)
-    rl_agent.Q = init_q
+    rl_agent = QLearningAgent(player=1, alpha=0.1, gamma=0.99, epsilon=0.2, q_table_path=RL_MODEL_PATH, q_table=init_q)
     opp_agent = opponent_from_type(opponent, init_q)
 
     win_history = []
@@ -94,7 +92,6 @@ def train(opponent="random", episodes=2000):
 
     with open(RL_MODEL_PATH, "wb") as f:
         pickle.dump(rl_agent.Q, f)
-
     print(f"Training complete. Model saved to {RL_MODEL_PATH}")
 
 

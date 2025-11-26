@@ -1,9 +1,14 @@
+import os
 import random
+import pickle
 import numpy as np
 
 
+DEFAULT_RL_QTABLE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "q_tables", "q_table_rl.pkl")
+
+
 class QLearningAgent:
-    def __init__(self, player, alpha=0.1, gamma=0.99, epsilon=0.2):
+    def __init__(self, player, alpha=0.1, gamma=0.99, epsilon=0.2, q_table_path: str = DEFAULT_RL_QTABLE, q_table=None):
         """
         player: 1 or -1 (which side this agent plays)
         """
@@ -11,7 +16,8 @@ class QLearningAgent:
         self.alpha = alpha
         self.gamma = gamma
         self.epsilon = epsilon
-        self.Q = {}  # (state_key, action_key) -> value
+        self.q_table_path = q_table_path
+        self.Q = q_table if q_table is not None else self._load_table()
         self.last_state = None
         self.last_action_key = None
         self.pending_sequence = []  # remaining capture steps to honor chosen chain
@@ -40,6 +46,19 @@ class QLearningAgent:
 
     def _get_Q(self, state_key, action_key):
         return self.Q.get((state_key, action_key), 0.0)
+
+    def _load_table(self):
+        if self.q_table_path and os.path.exists(self.q_table_path):
+            with open(self.q_table_path, "rb") as f:
+                return pickle.load(f)
+        return {}
+
+    def save(self):
+        if not self.q_table_path:
+            return
+        os.makedirs(os.path.dirname(self.q_table_path), exist_ok=True)
+        with open(self.q_table_path, "wb") as f:
+            pickle.dump(self.Q, f)
 
     def select_action(self, env):
         # honor pending steps of a previously chosen capture chain
@@ -106,14 +125,14 @@ class QLearningAgent:
             self.last_state = None
             self.last_action_key = None
             self.pending_sequence = []
+            self.save()
 
 
 class RLAgent(QLearningAgent):
     """Inference-only agent that uses a precomputed Q-table."""
 
-    def __init__(self, player, q_table, gamma=0.99, epsilon=0.0):
-        super().__init__(player=player, alpha=0.0, gamma=gamma, epsilon=epsilon)
-        self.Q = q_table
+    def __init__(self, player, q_table=None, gamma=0.99, epsilon=0.0, q_table_path: str = DEFAULT_RL_QTABLE):
+        super().__init__(player=player, alpha=0.0, gamma=gamma, epsilon=epsilon, q_table_path=q_table_path, q_table=q_table)
 
     def observe(self, reward, next_env, done):
         # Inference agent does not update Q-table
