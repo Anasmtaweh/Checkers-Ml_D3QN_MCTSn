@@ -52,7 +52,7 @@ def play_game(
         if isinstance(agent, CheckersRandomAgent):
             chosen_move = agent.select_action(env)
         else:
-            chosen_move = agent.select_action(board, current_player, legal_moves)
+            chosen_move = agent.select_action(board, current_player, legal_moves, greedy=True)
 
         if chosen_move is None:
             break

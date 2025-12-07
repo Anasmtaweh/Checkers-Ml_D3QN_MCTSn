@@ -13,13 +13,14 @@ def plot_rewards(csv_path: str, out_path: str) -> None:
     df = pd.read_csv(csv_path)
     if "episode" not in df.columns or "reward" not in df.columns:
         return
-    plt.figure()
-    plt.plot(df["episode"], df["reward"], label="Reward")
-    plt.title("Episode Rewards")
+    plt.figure(figsize=(10, 5))
+    plt.plot(df["episode"], df["reward"], alpha=0.3, label="Episode Reward")
+    if "average_reward_50" in df.columns:
+        plt.plot(df["episode"], df["average_reward_50"], linewidth=2, label="Running Avg (50)")
     plt.xlabel("Episode")
     plt.ylabel("Reward")
-    plt.grid(True)
     plt.legend()
+    plt.grid(True)
     _ensure_dir(out_path)
     plt.savefig(out_path)
     plt.close()
@@ -65,11 +66,13 @@ def plot_winrate(csv_path: str, out_path: str) -> None:
     if not os.path.exists(csv_path):
         return
     df = pd.read_csv(csv_path)
-    required = {"episode", "win_rate"}
+    # support new header "winrate"
+    col_name = "winrate" if "winrate" in df.columns else "win_rate"
+    required = {"episode", col_name}
     if not required.issubset(set(df.columns)):
         return
     plt.figure()
-    plt.plot(df["episode"], df["win_rate"], label="DDQN Win Rate")
+    plt.plot(df["episode"], df[col_name], label="DDQN Win Rate")
     plt.title("Win Rate vs Random")
     plt.xlabel("Episode")
     plt.ylabel("Win Rate")

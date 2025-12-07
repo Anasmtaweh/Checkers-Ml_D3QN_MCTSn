@@ -310,6 +310,7 @@ def main():
 
     for ep in range(1, args.train_episodes + 1):
         stats = trainer.run_episode(training=True, max_moves=args.max_moves)
+        print(f"[Train Episode {ep}] reward={stats['total_reward']:.2f} moves={stats['moves']} loss={stats.get('loss')}")
         rewards_window.append(stats["total_reward"])
         if len(rewards_window) > 20:
             rewards_window.pop(0)
@@ -364,4 +365,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

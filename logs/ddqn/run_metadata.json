@@ -11,7 +11,7 @@
   "epsilon_decay_steps": 200000,
   "soft_update_tau": 0.005,
   "use_soft_update": true,
-  "train_episodes": 5000,
+  "train_episodes": 3000,
   "eval_episodes": 3,
   "max_moves": 200,
   "replay_warmup_size": 5000,

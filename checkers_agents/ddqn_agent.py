@@ -181,7 +181,7 @@ class DDQNAgent:
     # ------------------------------------------------------
     # SELECT ACTION
     # ------------------------------------------------------
-    def select_action(self, board, player, legal_moves):
+    def select_action(self, board, player, legal_moves, greedy: bool = False):
         normalized_moves, mapping = self._prepare_legal(legal_moves)
         if not normalized_moves:
             return None
@@ -198,6 +198,10 @@ class DDQNAgent:
         masked[mask.unsqueeze(0) == 0] = -1e9
 
         a = int(torch.argmax(masked, dim=1).item())
+
+        # If greedy flag is set, we already forced argmax; return mapped env action
+        if greedy:
+            return mapping.get(a)
 
         # Directly return the env_action we stored
         return mapping.get(a)
