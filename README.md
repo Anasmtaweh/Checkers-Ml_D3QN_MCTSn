@@ -1,126 +1,76 @@
-# 🎮 Dama ML — Reinforcement Learning Agents for Checkers
+# CHECKERS-ML — Deep RL for Checkers
 
-## Project Overview
-Dama ML is a checkers (Dama) reinforcement learning sandbox. It includes a custom environment with mandatory multi-jump captures, three agent types (random, Q-learning RL, heuristic hybrid), CLI match control, training scripts, and a Flask web UI for visualizing games. Turns, capture chains, and king promotion are enforced in the environment.
+CHECKERS-ML trains and evaluates a Checkers agent using a Dueling Double DQN backbone. The project includes a full game environment with mandatory capture rules, a self‑play trainer with replay buffer, evaluation scripts, and a lightweight web UI for visualizing games.
 
-## Features
-- Multiple agents: `random`, `rl` (Q-table), `hybrid` (heuristics + greedy + Q-table scoring)
-- CLI-controlled matches with color-coded sides (Red = Player 1, White = Player 2)
-- Scoreboard in web UI: agent identities, piece counts, king counts, current turn
-- Mandatory capture rules with recursive multi-jump chains
-- Q-learning persistence (loads legacy `q_table.pkl` or saves to `models/`)
-- Config-driven defaults (`config_agents.json`)
-- Modular code: env, agents, web UI, training scripts, tests
+## What’s inside
+- **Environment (`checkers_env/`)**: Rule-accurate 8×8 Checkers with forced captures and multi-jump chains (`env.py`, `rules.py`, `board.py`).
+- **Agents (`checkers_agents/`)**: Inference-only DDQN agent and a random baseline. The DDQN agent mirrors trainer masking/normalization logic and returns env-format moves.
+- **Training (`training/`)**: Common utilities (board encoder, action manager, replay buffer) plus DDQN model, trainer, metrics, and evaluation helpers.
+- **Scripts**: `train.py` (main entry), evaluation utilities, and a Flask web viewer under `web/`.
+- **Artifacts**: `models/ddqn/` for checkpoints, `logs/ddqn/` for metrics and plots.
 
-## Folder Structure
-```
-dama-ml/
-├── agents/
-│   ├── hybrid_agent.py
-│   ├── random_agent.py
-│   └── rl_agent.py
-├── dama_env/
-│   ├── board.py
-│   ├── env.py
-│   └── rules.py
-├── web/
-│   ├── app.py
-│   ├── static/
-│   │   ├── board.css
-│   │   ├── board.js
-│   │   └── style.css   # legacy; index.html uses board.css/board.js
-│   └── templates/
-│       └── index.html
-├── config_agents.json
-├── play_one_game.py
-├── train_rl.py
-├── train_hybrid.py
-├── watch_trained.py
-├── test_env.py
-├── test_env_run.py
-├── test_multijump.py
-├── test_hybrid.py
-├── q_table.pkl                 # legacy model fallback
-├── flask_test_run.py
-└── models/                     # created by training scripts (rl_q_table.pkl, hybrid_model.pkl)
-```
-*Note: `models/` is expected to hold trained artifacts; create it if absent before saving models.*
+## Core design
+- **State encoding**: 12-channel tensor (pieces, kings, side-to-move, capture flag, repetition/move counters, last move).
+- **Action space**: Fixed 4,032 actions = all ordered origin→destination squares (64×63). Masks restrict Q-values to legal moves each turn. Captures are mandatory; when any capture exists, quiet moves are dropped. Multi-jump chains are executed step-by-step; the first hop is chosen, and the environment forces continuation via `info["continue"]`.
+- **Rewards (env)**: −1 per move, +10 per captured piece, ±50 win/loss bonus. Forced capture continuation is surfaced through `info["continue"]` and `force_capture_from`.
+- **Model**: Dueling DDQN CNN with separate online/target nets; double-Q target uses online argmax and target evaluation. Optional hard or soft target updates, gradient clipping, and optional Q clipping.
+- **Replay**: Uniform replay buffer storing states, actions, rewards (from acting side), dones, and legal masks for current/next states.
 
-## Installation (Ubuntu / Python 3.12)
+## Quickstart
+### Install
 ```bash
-git clone <repo> dama-ml
-cd dama-ml
 python3 -m venv .venv
 source .venv/bin/activate
-pip install flask numpy
+pip install -e .
+# For CUDA builds, install the matching torch wheel per https://pytorch.org/get-started/locally/
+pip install torch flask pandas matplotlib numpy
 ```
 
-## Running the Flask Web App
+### Train
+Use the tuned stable preset for Checkers:
 ```bash
-source .venv/bin/activate
+python train.py --preset stable-checkers --device cuda
+```
+Other useful flags:
+- `--train-episodes`: total episodes (stable preset defaults to 20,000)
+- `--max-moves`: per-game cap (default 200)
+- `--epsilon-start/end/decay-steps`: exploration schedule
+- `--soft-update/--soft-tau`: enable soft target updates (stable preset: tau=0.005)
+- `--save-interval` / `--eval-interval`: checkpointing and periodic eval vs random
+
+Checkpoints land in `models/ddqn/` (`checkpoint_*.pt`, `best_model.pt`, `final.pt`). Metrics and plots go to `logs/ddqn/`.
+
+### Evaluate
+Quick win-rate vs random:
+```bash
+python -m training.ddqn.evaluation --help  # see options
+```
+Or run the tournament helper to pit multiple checkpoints:
+```bash
+python -m training.ddqn.tournament_eval --checkpoints "models/ddqn/*.pt" --episodes 20
+```
+
+### Web viewer
+Launch the Flask UI to step through games:
+```bash
 cd web
 python app.py
+# open http://127.0.0.1:5000
 ```
-Open http://127.0.0.1:5000 to see the board, agent labels, piece/king counts, and turn indicator.
 
-## Playing Matches from CLI
-`play_one_game.py` supports agent selection per color (defaults from `config_agents.json`, red=rl, white=random):
-```bash
-python play_one_game.py --red=rl --white=hybrid
-python play_one_game.py --red=random --white=rl
-```
-Terminal output shows identities, turn order, and multi-jump continuity. Red = Player 1, White = Player 2; kings are highlighted in the environment render.
+## Key components (by path)
+- `checkers_env/env.py`: Env loop, reward logic, forced capture handling.
+- `checkers_env/rules.py`: Move generation (simple and capture sequences).
+- `training/common/action_manager.py`: 4,032-action mapping, masks.
+- `training/common/board_encoder.py`: 12-plane tensor encoder.
+- `training/common/replay_buffer.py`: Replay with legal masks.
+- `training/ddqn/network.py`: Dueling CNN.
+- `training/ddqn/model.py`: Online/target wrapper, target updates.
+- `training/ddqn/trainer.py`: Self-play loop, epsilon-greedy with masking, double-Q update.
+- `checkers_agents/ddqn_agent.py`: Inference-time action selection using the same masking as the trainer.
 
-## Training Commands
-RL agent training (Q-learning):
-```bash
-python train_rl.py --opponent=random --episodes=2000
-python train_rl.py --opponent=hybrid --episodes=2000
-python train_rl.py --opponent=rl --episodes=2000
-```
-Hybrid training (same loop, stores table for heuristic scoring):
-```bash
-python train_hybrid.py --opponent=random --episodes=3000
-python train_hybrid.py --opponent=rl --episodes=3000
-python train_hybrid.py --opponent=hybrid --episodes=3000
-```
-- Models save to `models/rl_q_table.pkl` or `models/hybrid_model.pkl` (directory is created by the scripts; create manually if permissions require).
-- Delete the files in `models/` (or `q_table.pkl` legacy) to reset training.
-- Opponent types: `random`, `hybrid`, or fixed-policy `rl`.
-
-## Agent Descriptions
-- **RandomAgent** (`agents/random_agent.py`): uniform random legal move.
-- **QLearningAgent / RLAgent** (`agents/rl_agent.py`): Q-table on atomic steps; handles multi-jump by queuing capture steps. `RLAgent` loads a table and does not learn.
-- **HybridAgent** (`agents/hybrid_agent.py`): heuristic ordering (mandatory captures, promotion, danger avoidance) with Q-table scoring fallback.
-
-## Multi-Jump Logic
-- In `dama_env/rules.py`, capture sequences are generated recursively as lists of `(start, landing, jumped)` triples.
-- `dama_env/env.py` applies capture chains step-by-step; the same player continues during a chain. Turn switches only when no further capture is available or after a non-capturing move.
-- Rewards: +10 per captured piece, optional -1 per move, +50 win / -50 loss.
-- Kings (±2) move both directions; promotion handled via board state.
-
-## Web UI (Scoreboard + Colors)
-- Canvas board with red (Player 1) and white (Player 2) pieces; kings outlined in gold.
-- Scoreboard (from backend responses) shows: agent names for Red/White, remaining pieces, kings, and current turn.
-- Buttons trigger predefined matchups and step-through play. No training occurs in the UI; it only loads existing models.
-
-## Model Files
-- Legacy fallback: `q_table.pkl` (root).
-- Preferred locations (created by training scripts): `models/rl_q_table.pkl`, `models/hybrid_model.pkl`.
-
-## Config File
-`config_agents.json` sets default CLI agents:
-```json
-{
-  "red": "rl",
-  "white": "random"
-}
-```
-CLI flags override these defaults.
-
-## Future Improvements
-- Stronger heuristics and danger evaluation
-- Deep RL policies (DQN/Actor-Critic)
-- Richer GUI with animations/highlighting
-- Opening book or endgame tablebases
-- Analytics dashboard for training and match stats
+## Notes & tips
+- Captures are mandatory; if `info["continue"]` is true the same player must continue the jump chain.
+- Reward shaping is confined to the environment rewards; no extra bonuses are injected in training.
+- Use `--preset debug` for quick sanity checks, `--preset stable-checkers` for longer runs.
+- If you load checkpoints manually, prefer `weights_only=True` with `torch.load` when available to avoid pickle warnings.

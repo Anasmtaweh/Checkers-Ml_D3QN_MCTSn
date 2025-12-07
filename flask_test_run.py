@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false
 from flask import Flask
 
 app = Flask(__name__)

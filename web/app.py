@@ -9,10 +9,10 @@ base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if base_dir not in sys.path:
     sys.path.append(base_dir)
 
-from dama_env.env import DamaEnv
-from agents.random_agent import RandomAgent
-from agents.rl_agent import RLAgent
-from agents.hybrid_agent import HybridAgent
+from checkers_env.env import CheckersEnv
+from checkers_agents.random_agent import CheckersRandomAgent
+from checkers_agents.ddqn_agent import DDQNAgent
+from checkers_agents.mcts_agent import MCTSAgent
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -34,8 +34,8 @@ def _load_table(paths):
 q_table = _load_table([RL_MODEL_PATH, os.path.join(base_dir, "q_table.pkl")])
 hybrid_table = _load_table([HYBRID_MODEL_PATH, RL_MODEL_PATH, os.path.join(base_dir, "q_table.pkl")])
 
-AgentType = Union[RandomAgent, RLAgent, HybridAgent]
-env: Optional[DamaEnv] = None
+AgentType = Union[CheckersRandomAgent, DDQNAgent, MCTSAgent]
+env: Optional[CheckersEnv] = None
 agent1: Optional[AgentType] = None
 agent2: Optional[AgentType] = None
 agent_labels: Dict[str, str] = {"red": "random", "white": "random"}
@@ -43,11 +43,11 @@ agent_labels: Dict[str, str] = {"red": "random", "white": "random"}
 
 def make_agent(agent_type: str, player: int):
     if agent_type == "random":
-        return RandomAgent(name=f"Random {player}")
+        return CheckersRandomAgent(name=f"Random {player}")
     if agent_type == "rl":
-        return RLAgent(player=player, q_table=q_table)
-    if agent_type == "hybrid":
-        return HybridAgent(player=player, q_table=hybrid_table or q_table)
+        return DDQNAgent(env=env)
+    if agent_type == "mcts":
+        return MCTSAgent(env=env)
     raise ValueError(f"Unknown agent type: {agent_type}")
 
 
@@ -85,14 +85,14 @@ def start_game():
     if mode == "random_vs_rl":
         red, white = "random", "rl"
     elif mode == "rl_vs_hybrid":
-        red, white = "rl", "hybrid"
+        red, white = "rl", "mcts"
     elif mode == "hybrid_vs_hybrid":
-        red, white = "hybrid", "hybrid"
+        red, white = "mcts", "mcts"
 
     red = red or "rl"
     white = white or "random"
 
-    env = DamaEnv()
+    env = CheckersEnv()
     env.reset()
 
     agent1 = make_agent(red, player=1)
@@ -114,10 +114,8 @@ def play_step():
     if agent is None:
         return jsonify({"error": "Agents not initialized"}), 400
 
-    if isinstance(agent, (RandomAgent, RLAgent)):
+    if isinstance(agent, (CheckersRandomAgent, DDQNAgent, MCTSAgent)):
         move = agent.select_action(env)
-    elif isinstance(agent, HybridAgent):
-        move = agent.choose(env)
     else:
         return jsonify({"error": "Unknown agent type"}), 400
 

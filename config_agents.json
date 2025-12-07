@@ -1,6 +1,0 @@
-{
-  "red": "rl",
-  "white": "random",
-  "rl_q_table": "q_tables/q_table_rl.pkl",
-  "hybrid_q_table": "q_tables/q_table_hybrid.pkl"
-}
