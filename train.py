@@ -1,24 +1,21 @@
 """
-Root training script for the DDQN agent in CHECKERS-ML.
+Root training script for the D3QN agent in CHECKERS-ML.
 
-Builds a DDQNTrainer, runs training episodes, then evaluation episodes.
+Builds a D3QNTrainer, runs training episodes, then evaluation episodes.
 """
 
 import argparse
 import os
 import torch
-from training.ddqn.train_ddqn import build_ddqn_trainer
 
-from checkers_env.env import CheckersEnv
-from training.ddqn.train_ddqn import build_ddqn_trainer  # pyright: ignore[reportMissingImports]
-from training.ddqn.metrics.metric_writer import DDQNMetricWriter
-from training.ddqn.metrics.plot_metrics import (
+from training.d3qn.train_d3qn import build_d3qn_trainer  # pyright: ignore[reportMissingImports]
+from training.d3qn.metrics.metric_writer import D3QNMetricWriter
+from training.d3qn.metrics.plot_metrics import (
     plot_rewards,
     plot_losses,
     plot_epsilon,
     plot_winrate,
 )
-from training.ddqn.evaluation import evaluate_ddqn_vs_random
 
 
 def parse_args():
@@ -136,87 +133,130 @@ def parse_args():
     return args
 
 
+def apply_preset(preset_name: str, args_obj, defaults):
+    presets = {
+        "debug": {
+            "train_episodes": 50,
+            "max_moves": 80,
+            "epsilon_decay_steps": 10_000,
+            "replay_warmup_size": 200,
+            "batch_size": 32,
+            "eval_interval": 5,
+            "save_interval": 100,
+        },
+        "baseline": {
+            "train_episodes": 10000,
+            "lr": 1e-4,
+            "epsilon_decay_steps": 200_000,
+            "replay_warmup_size": 2000,
+            "save_interval": 500,
+            "eval_interval": 25,
+        },
+        "soft-update": {
+            "train_episodes": 10000,
+            "lr": 1e-4,
+            "epsilon_decay_steps": 200_000,
+            "replay_warmup_size": 2000,
+            "save_interval": 500,
+            "eval_interval": 25,
+            "soft_update": True,
+            "use_soft_update": True,
+            "soft_tau": 0.005,
+            "soft_update_tau": 0.005,
+        },
+        # Tuned preset for stable Checkers DDQN training
+        "stable-checkers": {
+            # Training length
+            "train_episodes": 20000,
+            "max_moves": 200,
+
+            # Optimizer / LR
+            "lr": 1e-4,
+
+            # Replay / batch
+            "batch_size": 64,
+            "replay_warmup_size": 5000,
+
+            # Exploration
+            "epsilon_start": 1.0,
+            "epsilon_end": 0.05,
+            "epsilon_decay_steps": 200_000,
+
+            # Target updates (soft)
+            "soft_update": True,
+            "use_soft_update": True,
+            "soft_tau": 0.005,
+            "soft_update_tau": 0.005,
+
+            # Logging / eval
+            "save_interval": 500,
+            "eval_interval": 25,
+
+            # LR schedule & Q clipping
+            "lr_schedule": "none",
+            "lr_gamma": 0.99,
+            "qclip": 10.0,
+        },
+    }
+    if preset_name not in presets:
+        return
+    preset_values = presets[preset_name]
+    for key, val in preset_values.items():
+        if hasattr(args_obj, key):
+            # Only override if user kept default
+            if getattr(args_obj, key) == defaults.get(key):
+                setattr(args_obj, key, val)
+
+
+def run_periodic_evaluation(trainer, checkpoint_path, episode, writer, num_games=10, max_moves=300):
+    """
+    Evaluates the current checkpoint against a Random Agent.
+    Uses alternating starting players.
+    """
+    from training.d3qn.evaluation import evaluate_d3qn_vs_random  # local import to avoid circulars
+
+    stats = evaluate_d3qn_vs_random(
+        checkpoint_path,
+        num_episodes=num_games,
+        device=str(trainer.device),
+        max_moves=max_moves,
+        verbose=False,
+    )
+
+    overall = stats["overall_win_rate"]
+    first = stats["first_player_win_rate"]
+    second = stats["second_player_win_rate"]
+    draws = stats["draw_rate"]
+    wins = stats.get("d3qn_total_wins", 0)
+    losses = stats.get("random_wins", 0)
+
+    print(
+        f"[Eval @ Episode {episode}] "
+        f"overall={overall:.2f} first={first:.2f} second={second:.2f} "
+        f"(W:{wins}  D:{draws * num_games:.0f}  L:{losses}) "
+        f"lr={trainer.optimizer.param_groups[0]['lr']:.6f}"
+    )
+
+    if writer:
+        # make sure DDQNMetricWriter.write_eval matches this signature
+        writer.write_eval(
+            episode=episode,
+            win_rate=overall,
+            first_win_rate=first,
+            second_win_rate=second,
+            draws=draws,
+            lr=trainer.optimizer.param_groups[0]["lr"],
+        )
+
+    return stats
+
+
 def main():
     args = parse_args()
     defaults = vars(args._defaults)
 
-    # Apply preset overrides where the user did not explicitly change values
-    def apply_preset(preset_name: str, args_obj):
-        presets = {
-            "debug": {
-                "train_episodes": 50,
-                "max_moves": 80,
-                "epsilon_decay_steps": 10_000,
-                "replay_warmup_size": 200,
-                "batch_size": 32,
-                "eval_interval": 5,
-                "save_interval": 100,
-            },
-            "baseline": {
-                "train_episodes": 10000,
-                "lr": 1e-4,
-                "epsilon_decay_steps": 200_000,
-                "replay_warmup_size": 2000,
-                "save_interval": 500,
-                "eval_interval": 25,
-            },
-            "soft-update": {
-                "train_episodes": 10000,
-                "lr": 1e-4,
-                "epsilon_decay_steps": 200_000,
-                "replay_warmup_size": 2000,
-                "save_interval": 500,
-                "eval_interval": 25,
-                "soft_update": True,
-                "use_soft_update": True,
-                "soft_tau": 0.005,
-                "soft_update_tau": 0.005,
-            },
-            # Tuned preset for stable Checkers DDQN training
-            "stable-checkers": {
-                # Training length
-                "train_episodes": 20000,
-                "max_moves": 200,
-
-                # Optimizer / LR
-                "lr": 1e-4,
-
-                # Replay / batch
-                "batch_size": 64,
-                "replay_warmup_size": 5000,
-
-                # Exploration
-                "epsilon_start": 1.0,
-                "epsilon_end": 0.05,
-                "epsilon_decay_steps": 200_000,
-
-                # Target updates (soft)
-                "soft_update": True,
-                "use_soft_update": True,
-                "soft_tau": 0.005,
-                "soft_update_tau": 0.005,
-
-                # Logging / eval
-                "save_interval": 500,
-                "eval_interval": 25,
-
-                # LR schedule & Q clipping
-                "lr_schedule": "none",
-                "lr_gamma": 0.99,
-                "qclip": 10.0,
-            },
-        }
-        if preset_name not in presets:
-            return
-        preset_values = presets[preset_name]
-        for key, val in preset_values.items():
-            if hasattr(args_obj, key):
-                # Only override if user kept default
-                if getattr(args_obj, key) == defaults.get(key):
-                    setattr(args_obj, key, val)
-
     if args.preset:
-        apply_preset(args.preset, args)
+        apply_preset(args.preset, args, defaults)
 
     print("=== CHECKERS-ML: DDQN Training Scaffold ===")
     print(f"Using device: {args.device}")
@@ -228,13 +268,16 @@ def main():
     os.makedirs("logs/ddqn/plots", exist_ok=True)
     os.makedirs("logs/ddqn/metrics", exist_ok=True)
 
+    # Late import to avoid Pylance unbound + circular issues
+    from checkers_env.env import CheckersEnv  # pyright: ignore[reportMissingImports]
+
     # Construct environment
     env = CheckersEnv()
 
     # Build trainer
     use_soft = args.soft_update or args.use_soft_update
     tau_val = args.soft_tau if args.soft_update_tau is None else args.soft_update_tau
-    trainer = build_ddqn_trainer(
+    trainer = build_d3qn_trainer(
         env,
         device=args.device,
         gamma=args.gamma,
@@ -286,31 +329,20 @@ def main():
         "preset": args.preset,
         "q_clip": args.qclip,
     }
-    writer = DDQNMetricWriter(base_dir="logs/ddqn", run_metadata=run_metadata)
+    writer = D3QNMetricWriter(base_dir="logs/d3qn", run_metadata=run_metadata)
     trainer.metric_writer = writer
+
 
     best_score = -float("inf")
     rewards_window = []
 
-    def run_periodic_evaluation(trainer_obj, checkpoint_path, episode, writer_obj):
-        stats = evaluate_ddqn_vs_random(
-            checkpoint_path=checkpoint_path,
-            num_episodes=10,
-            device=trainer_obj.device,
-            max_moves=trainer_obj.max_steps_per_episode,
-        )
-        writer_obj.log_winrate(
-            episode=episode,
-            ddqn_wins=stats["ddqn_wins"],
-            random_wins=stats["random_wins"],
-            draws=stats["draws"],
-            win_rate=stats["ddqn_win_rate"],
-        )
-        return stats
-
     for ep in range(1, args.train_episodes + 1):
         stats = trainer.run_episode(training=True, max_moves=args.max_moves)
-        print(f"[Train Episode {ep}] reward={stats['total_reward']:.2f} moves={stats['moves']} loss={stats.get('loss')}")
+        print(
+            f"[Train Episode {ep}] reward={stats['total_reward']:.2f} "
+            f"moves={stats['moves']} loss={stats.get('loss')}"
+        )
+
         rewards_window.append(stats["total_reward"])
         if len(rewards_window) > 20:
             rewards_window.pop(0)
@@ -332,28 +364,62 @@ def main():
         if args.eval_interval and ep % args.eval_interval == 0:
             temp_ckpt = os.path.join("models/ddqn", "temp_eval.pt")
             trainer.model.save(temp_ckpt)
-            eval_stats = run_periodic_evaluation(trainer, temp_ckpt, ep, writer)
-            current_lr = trainer.optimizer.param_groups[0]["lr"]
-            print(
-                f"[Eval @ Episode {ep}] win_rate={eval_stats['ddqn_win_rate']:.2f} "
-                f"wins={eval_stats['ddqn_wins']} losses={eval_stats['random_wins']} draws={eval_stats['draws']} "
-                f"lr={current_lr:.6f}"
-            )
+            # Single, correct eval print (no second conflicting block)
+            run_periodic_evaluation(trainer, temp_ckpt, ep, writer, num_games=10, max_moves=args.max_moves)
 
         if avg_reward > best_score:
             best_score = avg_reward
             trainer.model.save(os.path.join("models/ddqn", "best_model.pt"))
 
     # Save final model
-    trainer.model.save(os.path.join("models/ddqn", "final.pt"))
+    save_path = os.path.join("models/ddqn", "final.pt")
+    trainer.model.save(save_path)
 
-    # Evaluation phase
-    print("\n--- Evaluation ---")
-    for ep in range(args.eval_episodes):
-        stats = trainer.run_episode(training=False, max_moves=args.max_moves)
+    # ------------------------------------------------------
+    # FINAL EVALUATION AFTER TRAINING
+    # ------------------------------------------------------
+    print("\n--- Final Evaluation ---")
+
+    from training.d3qn.evaluation import play_game  # pyright: ignore[reportMissingImports]
+    from checkers_agents.d3qn_agent import D3QNAgent  # pyright: ignore[reportMissingImports]
+    from checkers_agents.random_agent import CheckersRandomAgent  # pyright: ignore[reportMissingImports]
+
+    env = CheckersEnv()
+    agent = D3QNAgent(device=args.device)
+    agent.load_weights(save_path)
+    rand_agent = CheckersRandomAgent()
+
+    # Run 6 evaluation games with alternating starts
+    for i in range(6):
+        starting_player = 1 if i % 2 == 0 else -1
+        env.reset()
+
+        result = play_game(
+            env=env,
+            agent_first=(agent if starting_player == 1 else rand_agent),
+            agent_second=(rand_agent if starting_player == 1 else agent),
+            max_moves=400,  # allow longer games
+            starting_player=starting_player,
+            verbose=False,
+        )
+
+        # Normalize reward and winner to be from the D3QN agent's perspective
+        d3qn_is_first = starting_player == 1
+        d3qn_player_id = result["first_player"] if d3qn_is_first else result["second_player"]
+
+        final_reward = result["total_reward"] if d3qn_is_first else -result["total_reward"]
+        
+        if result["winner"] == d3qn_player_id:
+            final_winner = "D3QN"
+        elif result["winner"] == 0 or result["winner"] is None:
+            final_winner = "Draw"
+        else:
+            final_winner = "Random"
+
         print(
-            f"[Eval {ep+1}] moves={stats['moves']} "
-            f"reward={stats['total_reward']} winner={stats['winner']}"
+            f"[Final Eval {i+1}] start={'P1' if d3qn_is_first else 'P2'} "
+            f"moves={result['moves']} reward={final_reward:.2f} "
+            f"winner={final_winner}"
         )
 
     # Generate plots

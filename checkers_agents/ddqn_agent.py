@@ -1,7 +1,7 @@
 import torch
 from typing import Any, Dict, List, Tuple, Optional
 
-from training.ddqn.model import DDQNModel
+from training.d3qn.model import D3QNModel
 from training.common.board_encoder import CheckersBoardEncoder
 from training.common.action_manager import ActionManager
 
@@ -19,7 +19,7 @@ class DDQNAgent:
         self.encoder = CheckersBoardEncoder()
         self.action_manager = ActionManager(device=self.device)
 
-        self.model = DDQNModel(
+        self.model = D3QNModel(
             action_dim=self.action_manager.action_dim,
             device=self.device
         )
