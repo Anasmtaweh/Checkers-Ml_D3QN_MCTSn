@@ -1,83 +1,122 @@
-import os
-import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
 
-def _ensure_dir(path: str):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+# -------------------------------------------------------------------------
+# Utility: Moving Average Smoothing
+# -------------------------------------------------------------------------
+def smooth(data, window=100):
+    """Return a moving average of a 1D list/array."""
+    return pd.Series(data).rolling(window=window, min_periods=1).mean()
 
 
-def plot_rewards(csv_path: str, out_path: str) -> None:
-    if not os.path.exists(csv_path):
-        return
-    df = pd.read_csv(csv_path)
-    if "episode" not in df.columns or "reward" not in df.columns:
-        return
-    plt.figure(figsize=(10, 5))
-    plt.plot(df["episode"], df["reward"], alpha=0.3, label="Episode Reward")
-    if "average_reward_50" in df.columns:
-        plt.plot(df["episode"], df["average_reward_50"], linewidth=2, label="Running Avg (50)")
-    plt.xlabel("Episode")
-    plt.ylabel("Reward")
-    plt.legend()
-    plt.grid(True)
-    _ensure_dir(out_path)
-    plt.savefig(out_path)
-    plt.close()
+# -------------------------------------------------------------------------
+# Loss Plot
+# -------------------------------------------------------------------------
+def plot_loss(loss_csv, out_path, window=1000):
+    df = pd.read_csv(loss_csv)
 
+    plt.figure(figsize=(12, 5))
+    plt.plot(df["step"], df["loss"], alpha=0.15, label="Raw Loss")
+    plt.plot(df["step"], smooth(df["loss"], window), label=f"Smoothed Loss ({window})", color="orange")
 
-def plot_losses(csv_path: str, out_path: str) -> None:
-    if not os.path.exists(csv_path):
-        return
-    df = pd.read_csv(csv_path)
-    if "step" not in df.columns or "loss" not in df.columns:
-        return
-    plt.figure()
-    plt.plot(df["step"], df["loss"], label="Loss")
-    plt.title("Training Loss")
-    plt.xlabel("Step")
+    plt.title("Training Loss (Smoothed)", fontsize=14)
+    plt.xlabel("Training Step")
     plt.ylabel("Loss")
     plt.grid(True)
     plt.legend()
-    _ensure_dir(out_path)
+    plt.tight_layout()
     plt.savefig(out_path)
     plt.close()
+    print(f"[Plot saved] {out_path}")
 
 
-def plot_epsilon(csv_path: str, out_path: str) -> None:
-    if not os.path.exists(csv_path):
-        return
-    df = pd.read_csv(csv_path)
-    if "episode" not in df.columns or "epsilon" not in df.columns:
-        return
-    plt.figure()
-    plt.plot(df["episode"], df["epsilon"], label="Epsilon")
-    plt.title("Epsilon Decay")
+# -------------------------------------------------------------------------
+# Reward Plot
+# -------------------------------------------------------------------------
+def plot_rewards(reward_csv, out_path, window=200):
+    df = pd.read_csv(reward_csv)
+
+    plt.figure(figsize=(14, 6))
+
+    # raw rewards (transparent blue)
+    plt.plot(df["episode"], df["reward"], alpha=0.2, label="Episode Reward", color="skyblue")
+
+    # smoothed rewards (thicker orange)
+    plt.plot(df["episode"], smooth(df["reward"], window), label=f"Smoothed Reward ({window})", color="orange")
+
+    plt.title("Episode Rewards (Smoothed)", fontsize=14)
+    plt.xlabel("Episode")
+    plt.ylabel("Reward")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(out_path)
+    plt.close()
+    print(f"[Plot saved] {out_path}")
+
+
+# -------------------------------------------------------------------------
+# Epsilon Decay Plot
+# -------------------------------------------------------------------------
+def plot_epsilon(episode_csv, out_path):
+    df = pd.read_csv(episode_csv)
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(df["episode"], df["epsilon"], label="Epsilon", color="blue")
+
+    plt.title("Epsilon Decay", fontsize=14)
     plt.xlabel("Episode")
     plt.ylabel("Epsilon")
     plt.grid(True)
     plt.legend()
-    _ensure_dir(out_path)
+    plt.tight_layout()
     plt.savefig(out_path)
     plt.close()
+    print(f"[Plot saved] {out_path}")
 
 
-def plot_winrate(csv_path: str, out_path: str) -> None:
-    if not os.path.exists(csv_path):
-        return
-    df = pd.read_csv(csv_path)
-    # support new header "winrate"
-    col_name = "winrate" if "winrate" in df.columns else "win_rate"
-    required = {"episode", col_name}
-    if not required.issubset(set(df.columns)):
-        return
-    plt.figure()
-    plt.plot(df["episode"], df[col_name], label="DDQN Win Rate")
-    plt.title("Win Rate vs Random")
+# -------------------------------------------------------------------------
+# Winrate Plot (Smoothed + Fixed Scaling)
+# -------------------------------------------------------------------------
+def plot_winrate(winrate_csv, out_path, window=5):
+    df = pd.read_csv(winrate_csv)
+
+    # raw win rate
+    plt.figure(figsize=(12, 5))
+    plt.plot(df["episode"], df["win_rate"], alpha=0.3, label="Raw Winrate")
+
+    # smoothed winrate
+    plt.plot(df["episode"], smooth(df["win_rate"], window), label=f"Smoothed Winrate ({window})", color="orange")
+
+    plt.ylim(0.85, 1.01)   # avoid tall spikes and jitter
+    plt.title("Win Rate vs Random (Smoothed)", fontsize=14)
     plt.xlabel("Episode")
     plt.ylabel("Win Rate")
     plt.grid(True)
     plt.legend()
-    _ensure_dir(out_path)
+    plt.tight_layout()
     plt.savefig(out_path)
     plt.close()
+    print(f"[Plot saved] {out_path}")
+
+
+# -------------------------------------------------------------------------
+# Combined Function (Optional convenience)
+# -------------------------------------------------------------------------
+def plot_all_metrics(base_dir="logs/d3qn"):
+    """
+    Automatically generates all plots if expected CSVs exist.
+    """
+
+    episode_csv = f"{base_dir}/episode_stats.csv"
+    loss_csv = f"{base_dir}/loss.csv"
+    winrate_csv = f"{base_dir}/metrics/winrate.csv"
+
+    plot_rewards(episode_csv, f"{base_dir}/plots/reward_curve.png")
+    plot_epsilon(episode_csv, f"{base_dir}/plots/epsilon_curve.png")
+    plot_loss(loss_csv, f"{base_dir}/plots/loss_curve.png")
+    plot_winrate(winrate_csv, f"{base_dir}/plots/winrate_curve.png")
+
+    print("\nAll metric plots generated successfully.\n")

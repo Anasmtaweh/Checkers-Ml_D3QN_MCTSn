@@ -5,7 +5,7 @@ from typing import Optional, List
 
 
 class D3QNMetricWriter:
-    def __init__(self, base_dir: str = "logs/ddqn", run_metadata: Optional[dict] = None):
+    def __init__(self, base_dir: str = "logs/d3qn", run_metadata: Optional[dict] = None):
         self.base_dir = base_dir
         self.metrics_dir = os.path.join(base_dir, "metrics")
         os.makedirs(self.base_dir, exist_ok=True)
@@ -117,4 +117,3 @@ class D3QNMetricWriter:
 
 
 __all__ = ["D3QNMetricWriter"]
-

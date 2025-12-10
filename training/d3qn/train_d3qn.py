@@ -2,6 +2,7 @@ import torch
 
 from training.d3qn.model import D3QNModel
 from training.d3qn.trainer import D3QNTrainer
+from training.d3qn.metrics.metric_writer import D3QNMetricWriter
 from training.common.board_encoder import CheckersBoardEncoder
 from training.common.action_manager import ActionManager
 from training.common.replay_buffer import ReplayBuffer
@@ -60,4 +61,16 @@ def build_d3qn_trainer(
         q_clip=q_clip,
     )
 
+    # Attach metric writer by default
+    trainer.metric_writer = D3QNMetricWriter(base_dir="logs/d3qn")
+
     return trainer
+
+
+if __name__ == "__main__":
+    # Example quick run
+    from checkers_env.env import CheckersEnv
+
+    env = CheckersEnv()
+    trainer = build_d3qn_trainer(env, device="cpu")
+    history = trainer.train(num_episodes=1000)

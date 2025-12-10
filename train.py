@@ -12,7 +12,7 @@ from training.d3qn.train_d3qn import build_d3qn_trainer  # pyright: ignore[repor
 from training.d3qn.metrics.metric_writer import D3QNMetricWriter
 from training.d3qn.metrics.plot_metrics import (
     plot_rewards,
-    plot_losses,
+    plot_loss,
     plot_epsilon,
     plot_winrate,
 )
@@ -51,11 +51,12 @@ def parse_args():
         help="Episodes between checkpoints",
     )
     parser.add_argument(
-        "--eval-interval",
-        type=int,
-        default=10,
-        help="Episodes between evaluation runs (0 to disable)",
-    )
+    "--eval-interval",
+    type=int,
+    default=10,
+    help="Episodes between evaluation runs (0 to disable)",
+)
+
     parser.add_argument(
         "--lr-schedule",
         type=str,
@@ -263,10 +264,10 @@ def main():
     print(f"Preset: {args.preset}")
 
     # Ensure directories exist
-    os.makedirs("models/ddqn", exist_ok=True)
-    os.makedirs("logs/ddqn", exist_ok=True)
-    os.makedirs("logs/ddqn/plots", exist_ok=True)
-    os.makedirs("logs/ddqn/metrics", exist_ok=True)
+    os.makedirs("models/d3qn", exist_ok=True)
+    os.makedirs("logs/d3qn", exist_ok=True)
+    os.makedirs("logs/d3qn/plots", exist_ok=True)
+    os.makedirs("logs/d3qn/metrics", exist_ok=True)
 
     # Late import to avoid Pylance unbound + circular issues
     from checkers_env.env import CheckersEnv  # pyright: ignore[reportMissingImports]
@@ -274,9 +275,12 @@ def main():
     # Construct environment
     env = CheckersEnv()
 
-    # Build trainer
+    # ==========================================================
+    #  Build Trainer
+    # ==========================================================
     use_soft = args.soft_update or args.use_soft_update
     tau_val = args.soft_tau if args.soft_update_tau is None else args.soft_update_tau
+
     trainer = build_d3qn_trainer(
         env,
         device=args.device,
@@ -297,42 +301,28 @@ def main():
     )
 
     print("\nTrainer successfully constructed.")
-    print("Model:", trainer.model)
-    print("Action dimension:", trainer.action_manager.action_dim)
-    print(
-        f"Hyperparameters -> lr={args.lr}, epsilon_start={args.epsilon_start}, "
-        f"epsilon_end={args.epsilon_end}, decay_steps={args.epsilon_decay_steps}, "
-        f"use_soft_update={use_soft}, tau={tau_val}, target_update_interval={args.target_update}, "
-        f"replay_warmup_size={args.replay_warmup_size}, preset={args.preset}, "
-        f"lr_schedule={args.lr_schedule}, lr_gamma={args.lr_gamma}, q_clip={args.qclip}"
-    )
 
-    # Training phase
-    print("\n--- Training ---")
-    run_metadata = {
-        "seed": None,
+    # ==========================================================
+    #  Continuous Training: Load previous best model if exists
+    # ==========================================================
+    best_model_path = "models/d3qn/best_model.pt"
+
+    if os.path.exists(best_model_path):
+        print(f"Loading previous best model: {best_model_path}")
+        trainer.model.load(best_model_path)
+    else:
+        print("No previous model found → Starting fresh training.")
+
+    # ==========================================================
+    #  Metric logger
+    # ==========================================================
+    writer = D3QNMetricWriter(base_dir="logs/d3qn", run_metadata={
         "device": args.device,
-        "gamma": args.gamma,
-        "lr": args.lr,
-        "lr_schedule": args.lr_schedule,
-        "lr_gamma": args.lr_gamma,
-        "batch_size": args.batch_size,
-        "epsilon_start": args.epsilon_start,
-        "epsilon_end": args.epsilon_end,
-        "epsilon_decay_steps": args.epsilon_decay_steps,
-        "soft_update_tau": tau_val,
-        "use_soft_update": use_soft,
-        "train_episodes": args.train_episodes,
-        "eval_episodes": args.eval_episodes,
-        "max_moves": args.max_moves,
-        "replay_warmup_size": args.replay_warmup_size,
         "preset": args.preset,
-        "q_clip": args.qclip,
-    }
-    writer = D3QNMetricWriter(base_dir="logs/d3qn", run_metadata=run_metadata)
+    })
     trainer.metric_writer = writer
 
-
+    # Track the best moving average reward
     best_score = -float("inf")
     rewards_window = []
 
@@ -343,11 +333,14 @@ def main():
             f"moves={stats['moves']} loss={stats.get('loss')}"
         )
 
+        # Moving average over last 20 episodes
         rewards_window.append(stats["total_reward"])
         if len(rewards_window) > 20:
             rewards_window.pop(0)
+
         avg_reward = sum(rewards_window) / len(rewards_window)
 
+        # Log episode metrics
         writer.log_episode(
             episode=ep,
             reward=stats["total_reward"],
@@ -357,23 +350,39 @@ def main():
             loss=stats.get("loss"),
         )
 
-        if ep % args.save_interval == 0:
-            ckpt_path = os.path.join("models/ddqn", f"checkpoint_{ep}.pt")
-            trainer.model.save(ckpt_path)
-
-        if args.eval_interval and ep % args.eval_interval == 0:
-            temp_ckpt = os.path.join("models/ddqn", "temp_eval.pt")
-            trainer.model.save(temp_ckpt)
-            # Single, correct eval print (no second conflicting block)
-            run_periodic_evaluation(trainer, temp_ckpt, ep, writer, num_games=10, max_moves=args.max_moves)
-
+        # ------------------------------------------------------
+        # Save best model
+        # ------------------------------------------------------
         if avg_reward > best_score:
             best_score = avg_reward
-            trainer.model.save(os.path.join("models/ddqn", "best_model.pt"))
+            trainer.model.save("models/d3qn/best_model.pt")
+            print(f"New best model saved at Episode {ep} with avg_reward={avg_reward:.2f}")
 
-    # Save final model
-    save_path = os.path.join("models/ddqn", "final.pt")
-    trainer.model.save(save_path)
+        # ------------------------------------------------------
+        # Periodic checkpoint save
+        # ------------------------------------------------------
+        if ep % args.save_interval == 0:
+            trainer.model.save(f"models/d3qn/checkpoint_{ep}.pt")
+
+        # ------------------------------------------------------
+        # NEW: Periodic evaluation during training
+        # ------------------------------------------------------
+        if args.eval_interval and ep % args.eval_interval == 0:
+            temp_ckpt = os.path.join("models/d3qn", "temp_eval.pt")
+            trainer.model.save(temp_ckpt)
+            run_periodic_evaluation(
+                trainer=trainer,
+                checkpoint_path=temp_ckpt,
+                episode=ep,
+                writer=writer,
+                num_games=10,
+                max_moves=args.max_moves,
+            )
+
+    # Final model save
+    final_path = "models/d3qn/final.pt"
+    trainer.model.save(final_path)
+    print(f"\nFinal model saved to {final_path}")
 
     # ------------------------------------------------------
     # FINAL EVALUATION AFTER TRAINING
@@ -386,7 +395,7 @@ def main():
 
     env = CheckersEnv()
     agent = D3QNAgent(device=args.device)
-    agent.load_weights(save_path)
+    agent.load_weights("models/d3qn/best_model.pt")
     rand_agent = CheckersRandomAgent()
 
     # Run 6 evaluation games with alternating starts
@@ -422,12 +431,15 @@ def main():
             f"winner={final_winner}"
         )
 
-    # Generate plots
-    plot_rewards("logs/ddqn/episode_stats.csv", "logs/ddqn/plots/reward_curve.png")
-    plot_losses("logs/ddqn/loss.csv", "logs/ddqn/plots/loss_curve.png")
-    plot_epsilon("logs/ddqn/episode_stats.csv", "logs/ddqn/plots/epsilon_curve.png")
-    plot_winrate("logs/ddqn/metrics/winrate.csv", "logs/ddqn/plots/winrate_curve.png")
+    # Plot metrics
+    plot_rewards("logs/d3qn/episode_stats.csv", "logs/d3qn/plots/reward_curve.png")
+    plot_loss("logs/d3qn/loss.csv", "logs/d3qn/plots/loss_curve.png")
+    plot_epsilon("logs/d3qn/episode_stats.csv", "logs/d3qn/plots/epsilon_curve.png")
+    plot_winrate("logs/d3qn/metrics/winrate.csv", "logs/d3qn/plots/winrate_curve.png")
+
+    print("Plots generated in logs/d3qn/plots/")
 
 
 if __name__ == "__main__":
     main()
+

@@ -1,0 +1,59 @@
+logs
+├── d3qn
+│   ├── episode_stats.csv
+│   ├── loss.csv
+│   ├── metrics
+│   │   ├── episode_stats.jsonl
+│   │   └── winrate.csv
+│   ├── plots
+│   └── run_metadata.json
+└── ddqn
+    ├── metrics
+    └── plots
+training
+├── common
+│   ├── action_manager.py
+│   ├── board_encoder.py
+│   ├── __init__.py
+│   ├── model_config.json
+│   ├── __pycache__
+│   │   ├── action_manager.cpython-312.pyc
+│   │   ├── board_encoder.cpython-312.pyc
+│   │   ├── __init__.cpython-312.pyc
+│   │   └── replay_buffer.cpython-312.pyc
+│   ├── replay_buffer.py
+│   └── utils.py
+├── d3qn
+│   ├── evaluation.py
+│   ├── __init__.py
+│   ├── metrics
+│   │   ├── __init__.py
+│   │   ├── metric_writer.py
+│   │   ├── plot_metrics.py
+│   │   └── __pycache__
+│   │       ├── __init__.cpython-312.pyc
+│   │       ├── metric_writer.cpython-312.pyc
+│   │       └── plot_metrics.cpython-312.pyc
+│   ├── model.py
+│   ├── multi_seed_eval.py
+│   ├── network.py
+│   ├── __pycache__
+│   │   ├── evaluation.cpython-312.pyc
+│   │   ├── __init__.cpython-312.pyc
+│   │   ├── model.cpython-312.pyc
+│   │   ├── network.cpython-312.pyc
+│   │   ├── train_d3qn.cpython-312.pyc
+│   │   ├── train_ddqn.cpython-312.pyc
+│   │   └── trainer.cpython-312.pyc
+│   ├── tournament_eval.py
+│   ├── train_d3qn.py
+│   ├── train_ddqn.py
+│   └── trainer.py
+├── __init__.py
+├── __pycache__
+│   └── __init__.cpython-312.pyc
+└── tests
+    └── test_encoder.py
+scripts  [error opening dir]
+
+16 directories, 40 files
