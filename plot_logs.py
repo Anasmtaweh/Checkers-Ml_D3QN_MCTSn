@@ -18,9 +18,9 @@ def plot_logs(log_file="training_log.txt"):
                     try:
                         # Extract Data using Regex
                         ep_match = re.search(r"Episode\s+(\d+)", line)
-                        rew_match = re.search(r"Reward:\s+([-\d.eE+]+)", line)
-                        len_match = re.search(r"Length:\s+([-\d.eE+]+)", line)
-                        loss_match = re.search(r"Loss:\s+([-\d.eE+]+)", line)
+                        rew_match = re.search(r"Reward\s+([-\d.eE+]+)", line)
+                        len_match = re.search(r"Length\s+([-\d.eE+]+)", line)
+                        loss_match = re.search(r"Loss\s+([-\d.eE+]+)", line)
                         
                         if ep_match and rew_match and loss_match and len_match:
                             ep = int(ep_match.group(1))
