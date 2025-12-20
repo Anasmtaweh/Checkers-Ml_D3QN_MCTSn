@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Iron League Arena</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h1>🛡️ Iron League</h1>
+            
+            <div class="control-panel">
+                <div class="player-select">
+                    <label>🔴 Red (P1)</label>
+                    <select id="p1-select">
+                        <option value="human">Human</option>
+                        <option value="random">Random Bot</option>
+                        {% for agent in agents %}
+                        <option value="{{ agent }}">{{ agent }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="player-select">
+                    <label>⚫ Black (P2)</label>
+                    <select id="p2-select">
+                        <option value="human">Human</option>
+                        <option value="random">Random Bot</option>
+                        {% for agent in agents %}
+                        <option value="{{ agent }}">{{ agent }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button onclick="startGame()" class="btn start-btn">⚔️ Start Game</button>
+                <hr>
+                <div id="ai-controls" style="display:none;">
+                    <button onclick="triggerAIMove()" class="btn">🤖 AI Move</button>
+                    <button onclick="toggleAutoPlay()" id="auto-btn" class="btn">▶️ Auto-Play</button>
+                </div>
+            </div>
+
+            <div class="status-box">
+                <h2 id="status-text">Waiting...</h2>
+                <div id="winner-display"></div>
+            </div>
+        </div>
+
+        <div class="game-area">
+            <div id="board" class="board"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='game.js') }}"></script>
+</body>
+</html>

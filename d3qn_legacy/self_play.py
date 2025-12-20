@@ -322,15 +322,20 @@ def main_training_loop():
                     current_lr_val = optimizer.param_groups[0]['lr']
                     log_print(f"  [Q-Health] Max: {max_q:.2f} | Avg: {avg_q:.2f} | LR: {current_lr_val:.2e}")
 
-                # 2. ADAPTIVE AUTO-BRAKE (The Fix)
-                # If Q-values get too hot (Max > 28), cut LR in half immediately.
-                if max_q > 28.0 and optimizer.param_groups[0]['lr'] > 2e-7:
+                # 2. ADAPTIVE AUTO-BRAKE (FIXED: No Floor)
+                # Raised threshold to 35.0 (since 4500 proved 47.0 is playable)
+                if max_q > 35.0:
                     old_lr = optimizer.param_groups[0]['lr']
-                    new_lr = old_lr * 0.5
+                    # Keep cutting in half, but don't go below 1e-8 (Atomic Level)
+                    new_lr = max(old_lr * 0.5, 1e-8)
+
                     for param_group in optimizer.param_groups:
                         param_group['lr'] = new_lr
-                    manual_lr = new_lr  # Store for next episodes
-                    auto_brake_active = True  # Prevent get_learning_rate() override
+                    
+                    # Force the manual schedule to respect this new low
+                    manual_lr = new_lr
+                    auto_brake_active = True
+                    
                     log_print(f"⚠️ AUTO-BRAKE TRIGGERED: Max Q={max_q:.1f}. Cutting LR: {old_lr:.2e} -> {new_lr:.2e}")
 
                 # 3. EMERGENCY STOP (Raised threshold because Brake handles the rest)
