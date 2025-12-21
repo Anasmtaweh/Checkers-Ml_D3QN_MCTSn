@@ -59,21 +59,6 @@ EPSILON_START = 1.0
 EPSILON_END = 0.05
 EPSILON_DECAY = 5000  # Episodes to decay from start to end
 
-# ╔═══════════════════════════════════════════════════════════════╗
-# ║ CRITICAL CHANGE #1: REWARD_SCALE (GEN 7)                     ║
-# ╠═══════════════════════════════════════════════════════════════╣
-# ║ Changed from 100.0 → 1.0                                      ║
-# ║                                                                ║
-# ║ REASON: New rewards (1.0, -1.0, 0.01, 0.001) are already     ║
-# ║         normalized for neural network. Scaling by 100 would  ║
-# ║         shrink them to unusable magnitudes (0.01 for win).   ║
-# ║                                                                ║
-# ║ With REWARD_SCALE = 1.0:                                      ║
-# ║   scaled_reward = custom_reward / 1.0 = custom_reward        ║
-# ║   (No double-scaling; direct pass-through)                   ║
-# ╚═══════════════════════════════════════════════════════════════╝
-REWARD_SCALE = 1.0  # Gen 7: Set to 1.0 (was 100.0 in Gen 6)
-
 # Soft Updates (Gen 2 patch)
 # Target network uses polyak averaging (tau=0.005) every step
 
@@ -353,7 +338,6 @@ def main():
     print(f"Learning rate: {LEARNING_RATE}")
     print(f"Gamma: {GAMMA}")
     print(f"Epsilon: {epsilon_start:.4f} → {EPSILON_END} (over {EPSILON_DECAY} episodes)")
-    print(f"Reward scaling: 1/{REWARD_SCALE} (Gen 7: NO SCALING)")
     print(f"Soft updates: tau=0.005 (every step)")
     print("\n🔧 Gen 7 Reward Structure:")
     print("  • Win: +1.0 (was +100→0.01, now proper 1.0)")
@@ -415,129 +399,6 @@ def main():
                 # Execute action in environment
                 next_state, reward, done, info = env.step(env_move)
 
-                # ╔═══════════════════════════════════════════════════════╗
-                # ║ CRITICAL CHANGE #2-4: REWARD ASSIGNMENT (GEN 7)      ║
-                # ╠═══════════════════════════════════════════════════════╣
-                # ║ Restructured reward function to eliminate exploit    ║
-                # ╚═══════════════════════════════════════════════════════╝
-
-                # Get absolute truth about game outcome
-                winner = info.get('winner', 0)
-
-                # ════════════════════════════════════════════════════════
-                # TERMINAL STATE REWARDS (Win/Loss)
-                # ════════════════════════════════════════════════════════
-                if done and winner == current_player:
-                    # ┌────────────────────────────────────────────────┐
-                    # │ CASE A: VICTORY                                │
-                    # ├────────────────────────────────────────────────┤
-                    # │ Custom Reward: +1.0                            │
-                    # │ Represents maximum confidence/value            │
-                    # │ This is the GOAL the agent should maximize     │
-                    # └────────────────────────────────────────────────┘
-                    custom_reward = 1.0
-
-                elif done and winner != 0 and winner != current_player:
-                    # ┌────────────────────────────────────────────────┐
-                    # │ CASE B: DEFEAT (The Death Penalty)            │
-                    # ├────────────────────────────────────────────────┤
-                    # │ Custom Reward: -1.0                            │
-                    # │ Represents maximum punishment                  │
-                    # │                                                │
-                    # │ CRITICAL: By setting this to -1.0, we ensure  │
-                    # │ that NO AMOUNT of capturing (which yields     │
-                    # │ tiny decimals like 0.01) can ever make a      │
-                    # │ loss "profitable"                              │
-                    # │                                                │
-                    # │ Math verification:                             │
-                    # │   Max captures (12 pieces × 0.01) = 0.12      │
-                    # │   Loss penalty: -1.0                           │
-                    # │   Net: 0.12 - 1.0 = -0.88 ← STILL NEGATIVE!   │
-                    # │                                                │
-                    # │ Loophole CLOSED ✓                             │
-                    # └────────────────────────────────────────────────┘
-                    custom_reward = -1.0
-
-                else:
-                    # ════════════════════════════════════════════════════
-                    # INTERMEDIATE STATE REWARDS (Captures/Tax)
-                    # ════════════════════════════════════════════════════
-
-                    if reward > 20.0:
-                        # ┌────────────────────────────────────────────┐
-                        # │ BIG CAPTURE (Multi-Jump/King)              │
-                        # ├────────────────────────────────────────────┤
-                        # │ Env reward > 20.0 indicates multi-jump or  │
-                        # │ king capture                               │
-                        # │                                            │
-                        # │ Custom Reward: +0.01                       │
-                        # │                                            │
-                        # │ This is SIGNIFICANTLY LESS than Win (1.0)  │
-                        # │ Ratio: 0.01 / 1.0 = 1%                     │
-                        # │ Meaning: Captures are 1% as valuable as    │
-                        # │ winning the game                           │
-                        # └────────────────────────────────────────────┘
-                        custom_reward = 0.01
-
-                    elif reward > 8.0:
-                        # ┌────────────────────────────────────────────┐
-                        # │ SMALL CAPTURE (Single Jump)                │
-                        # ├────────────────────────────────────────────┤
-                        # │ Env reward > 8.0 indicates single capture  │
-                        # │                                            │
-                        # │ Custom Reward: +0.001                      │
-                        # │                                            │
-                        # │ This is 10× smaller than multi-jump        │
-                        # │ Ratio: 0.001 / 1.0 = 0.1%                  │
-                        # └────────────────────────────────────────────┘
-                        custom_reward = 0.001
-
-                    else:
-                        # ┌────────────────────────────────────────────┐
-                        # │ LIVING TAX (Non-Capture Move)              │
-                        # ├────────────────────────────────────────────┤
-                        # │ Just a regular move with no capture        │
-                        # │                                            │
-                        # │ Custom Reward: -0.0001                     │
-                        # │                                            │
-                        # │ Microscopic negative to encourage          │
-                        # │ efficiency (don't drag out games           │
-                        # │ unnecessarily)                             │
-                        # │                                            │
-                        # │ This prevents passive play while being     │
-                        # │ too small to dominate other signals        │
-                        # └────────────────────────────────────────────┘
-                        custom_reward = -0.0001
-
-                # ════════════════════════════════════════════════════════
-                # REWARD SCALING (Gen 7: Pass-through)
-                # ════════════════════════════════════════════════════════
-                # With REWARD_SCALE = 1.0:
-                #   scaled_reward = custom_reward / 1.0 = custom_reward
-                # No double-scaling occurs; values pass through unchanged
-                scaled_reward = custom_reward / REWARD_SCALE
-
-                # ════════════════════════════════════════════════════════
-                # MATH VERIFICATION (Gen 7 Loophole Check)
-                # ════════════════════════════════════════════════════════
-                # Scenario B (Old Gen 6 exploit):
-                #   4 captures @ 0.01 each = 0.04
-                #   Loss penalty = -1.0
-                #   NET: 0.04 - 1.0 = -0.96 ← NEGATIVE (losing is bad!)
-                #
-                # Compare to Scenario C (lose with nothing):
-                #   0 captures = 0.0
-                #   Loss penalty = -1.0
-                #   NET: 0.0 - 1.0 = -1.0
-                #
-                # Now: -0.96 > -1.0 (capturing before losing is SLIGHTLY
-                # better than not capturing, but BOTH are heavily negative)
-                #
-                # The key: Capturing cannot make losing POSITIVE anymore!
-                # Old Gen 6: +5 profit (exploit)
-                # New Gen 7: -0.96 loss (no exploit) ✓
-                # ════════════════════════════════════════════════════════
-
                 # Get next state's legal moves (for mask)
                 next_legal_moves = env.get_legal_moves() if not done else []
                 next_legal_mask = action_manager.make_legal_action_mask(next_legal_moves)
@@ -550,7 +411,7 @@ def main():
                     buffer.push(
                         state=encoded_state,
                         action=int(action_id),
-                        reward=scaled_reward,
+                        reward=reward,
                         next_state=next_encoded_state,
                         done=done,
                         next_legal_mask=next_legal_mask

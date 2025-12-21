@@ -63,28 +63,6 @@ class CheckersEnv:
         """Public helper: piece and king counts for both players on the current board."""
         return self._piece_and_king_counts_for(self.board.get_state())
 
-    # --- Material delta shaping (Option A: end-of-turn only) ---
-    MATERIAL_MEN_W = 1.0
-    MATERIAL_KING_W = 1.5
-    MATERIAL_SCALE = 1.0
-
-    def _material_score(self, board: np.ndarray, player: int) -> float:
-        stats = self._piece_and_king_counts_for(board)
-        men = stats[player]["pieces"]
-        kings = stats[player]["kings"]
-        return men * self.MATERIAL_MEN_W + kings * self.MATERIAL_KING_W
-
-    def _material_delta_reward(self, before: np.ndarray, after: np.ndarray, player: int) -> float:
-        me_before = self._material_score(before, player)
-        me_after = self._material_score(after, player)
-        opp = -player
-        opp_before = self._material_score(before, opp)
-        opp_after = self._material_score(after, opp)
-
-        delta_me = me_after - me_before
-        delta_opp = opp_after - opp_before
-        return self.MATERIAL_SCALE * (delta_me - delta_opp)
-
     def _check_game_over(self) -> Tuple[bool, int]:
         """
         Returns (done, winner) where winner is:
@@ -147,17 +125,11 @@ class CheckersEnv:
     # ------------------------------------------------------------------
     # Capture handling
     # ------------------------------------------------------------------
-    def _apply_capture_sequence(self, steps: List[CaptureStep], player: int) -> Tuple[Tuple[int, int], float, bool]:
+    def _apply_capture_sequence(self, steps: List[CaptureStep], player: int) -> Tuple[Tuple[int, int], int, bool]:
         """
         Apply one or more capture steps.
-        Returns (last_pos, total_reward, continue_flag).
-
-        Reward components here:
-          +10  per captured piece
-          -1   per jump (baseline move cost)
-          +4   per extra jump in the same turn (multi-jump bonus)
+        Returns (last_pos, captured_count, continue_flag).
         """
-        total_reward = 0.0
         last_pos: Optional[Tuple[int, int]] = None
 
         # Apply each capture step in sequence
@@ -172,14 +144,8 @@ class CheckersEnv:
             self.board.board[jr, jc] = 0
 
             last_pos = (lr, lc)
-            total_reward += 10.0   # captured one piece
-            total_reward -= 1.0    # small "time" penalty
 
-        # Extra shaping for multi-jump:
-        num_captures = len(steps)
-        if num_captures > 1:
-            # First capture gets the base +10, each additional capture gets a bit extra.
-            total_reward += (num_captures - 1) * 4.0
+        captured_count = len(steps)
 
         # Check if another capture is possible from last_pos (capture chains)
         more_captures = CheckersRules.capture_sequences(
@@ -194,159 +160,72 @@ class CheckersEnv:
         if more_captures:
             # Must continue chain with the same piece; do not change player yet.
             self.force_capture_from = safe_last_pos
-            return safe_last_pos, total_reward, True
+            return safe_last_pos, captured_count, True
 
         # No more captures; chain ends and turn will switch.
         self.force_capture_from = None
-        return safe_last_pos, total_reward, False
-
-    # ------------------------------------------------------------------
-    # Positional reward shaping
-    # ------------------------------------------------------------------
-    def _player_squares(self, board: np.ndarray, player: int) -> List[Tuple[int, int]]:
-        """Return all (row, col) squares occupied by `player` (men or kings)."""
-        positions: List[Tuple[int, int]] = []
-        for r in range(board.shape[0]):
-            for c in range(board.shape[1]):
-                if np.sign(board[r, c]) == player and board[r, c] != 0:
-                    positions.append((r, c))
-        return positions
-
-    def _positional_shaping(
-        self,
-        before: np.ndarray,
-        after: np.ndarray,
-        player: int,
-    ) -> float:
-        """
-        Small, smooth rewards on top of the main ones to encourage:
-          - king promotion
-          - occupying central squares
-          - avoiding immediately hanging the moved piece
-        """
-        reward = 0.0
-        stats_before = self._piece_and_king_counts_for(before)
-        stats_after = self._piece_and_king_counts_for(after)
-
-        me = player
-        opp = -player
-
-        # 1) King promotion bonus (per new king)
-        new_kings = stats_after[me]["kings"] - stats_before[me]["kings"]
-        if new_kings > 0:
-            reward += 5.0 * new_kings
-
-        # 2) Identify the square where our moved piece ended up
-        before_sq = set(self._player_squares(before, me))
-        after_sq = set(self._player_squares(after, me))
-        added = list(after_sq - before_sq)
-
-        moved_to: Optional[Tuple[int, int]] = None
-        if len(added) == 1:
-            moved_to = added[0]
-
-            r, c = moved_to
-
-            # 2a) Central control: encourage staying near the center
-            # Board is 8x8, indices 0..7; treat rows 2..5 and cols 2..5 as "center"
-            if 2 <= r <= 5 and 2 <= c <= 5:
-                reward += 0.5
-            # Slight penalty for sitting on the extreme back ranks (excluding promotion)
-            if r in (0, 7):
-                reward -= 0.2
-
-        # 3) Avoid immediately hanging the moved piece:
-        #    Look one ply ahead from opponent's perspective; if any capture
-        #    explicitly jumps over our moved square, apply a small penalty.
-        if moved_to is not None:
-            enemy_moves = CheckersRules.get_legal_moves(after, opp, None)
-            in_danger = False
-            for mv in enemy_moves:
-                norm = self._normalize_action(mv)
-                if isinstance(norm, list):
-                    # capture chain -> list of (start, landing, jumped)
-                    for (_, _, jumped) in norm:
-                        if tuple(jumped) == moved_to:
-                            in_danger = True
-                            break
-                if in_danger:
-                    break
-
-            if in_danger:
-                # OLD: reward -= 1.0
-                # NEW: Reduced penalty.
-                # We want the agent to learn safety from Q-loss, not be terrified to move.
-                reward -= 0.1
-
-        return reward
+        return safe_last_pos, captured_count, False
 
     # ------------------------------------------------------------------
     # OpenAI-Gym-like API
     # ------------------------------------------------------------------
     def step(self, action: Any):
         """
-        Apply an action and return (next_state, reward, done, info).
-
-        Reward components:
-          -1    per move (time penalty)
-          +10   per captured piece (inside _apply_capture_sequence)
-          +4    per extra jump in a multi-jump (inside _apply_capture_sequence)
-          +5    per new king
-          +0.5  for moving into the central area
-          -0.2  for ending turn on back rank (non-promotion)
-          -1    if the moved piece is immediately capturable next ply
-          +50   win, -50 loss at game end
+        Apply an action and return (next_state, reward, done, info) with Gen 7 rewards.
         """
         if self.done:
             return self.board.get_state(), 0.0, True, {"winner": 0}
 
-        # Snapshot before applying the action for shaping
-        before_board = np.copy(self.board.get_state())
         player = self.current_player
         info: Dict[str, Any] = {"winner": 0, "continue": False, "from": None}
 
+        # 1. Parse and Execute Move
         normalized = self._normalize_action(action)
+        
+        # Track if we captured something
+        captured_count = 0
 
-        # --- Capture path (possibly multi-jump) ---
         if isinstance(normalized, list):
-            last_pos, reward, must_continue = self._apply_capture_sequence(normalized, player)
+            # It's a capture sequence
+            last_pos, count, must_continue = self._apply_capture_sequence(normalized, player)
+            captured_count = count
 
             if must_continue:
-                # Capture chain is not finished; same player must continue from last_pos.
                 self.done = False
                 info["continue"] = True
                 info["from"] = last_pos
-                # We don't apply positional shaping yet because the move isn't finished.
-                return self.board.get_state(), reward, False, info
+                # Intermediate reward for multi-jump progress?
+                # Usually better to wait until turn ends, but if you want:
+                return self.board.get_state(), 0.0, False, info
 
-            # Capture chain finished -> switch turn after positional shaping.
             self.current_player *= -1
-
-        # --- Simple move path ---
         else:
-            # Expected format: ((r1, c1), (r2, c2))
+            # Simple move
             (r1, c1), (r2, c2) = normalized
             self.board.move_piece(r1, c1, r2, c2)
-            reward = -1.0  # base move penalty
-            self.force_capture_from = None
             self.current_player *= -1
 
-        # Apply positional shaping based on before/after board states
-        after_board = self.board.get_state()
-        reward += self._positional_shaping(before_board, after_board, player)
-        # NEW: material delta shaping (end-of-turn)
-        reward += self._material_delta_reward(before_board, after_board, player)
-
-        # Check for terminal outcome
+        # 2. Check Game Over
         done, winner = self._check_game_over()
         self.done = done
         info["winner"] = winner
 
+        # 3. Calculate "Gen 7" Rewards directly here
+        reward = -0.0001  # Living Tax (Default)
+
         if done:
             if winner == player:
-                reward += 50.0
+                reward = 1.0   # WIN
             elif winner == -player:
-                reward -= 50.0
+                reward = -1.0  # LOSS
+            else:
+                reward = 0.0   # DRAW
+        else:
+            # If not done, check for captures
+            if captured_count >= 2:
+                reward = 0.01  # Multi-jump
+            elif captured_count == 1:
+                reward = 0.001 # Single jump
 
         return self.board.get_state(), reward, done, info
 

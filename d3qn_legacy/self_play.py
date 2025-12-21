@@ -279,26 +279,17 @@ def main_training_loop():
 
                 next_state, reward, done, info = env.step(env_move)
                 
-                winner = info.get('winner', 0)
-                if done and winner == agent_side: custom_reward = 1.0
-                elif done and winner == -agent_side: custom_reward = -1.0
-                elif done: custom_reward = 0.0
-                else:
-                    if reward > 20.0: custom_reward = 0.01
-                    elif reward > 8.0: custom_reward = 0.001
-                    else: custom_reward = -0.0001
-                
                 next_encoded = encoder.encode(next_state, player=agent_side)
                 next_mask = action_manager.make_legal_action_mask(env.get_legal_moves() if not done else [])
                 
-                buffer.push(encoded_state, action_id, custom_reward, next_encoded, done, next_mask)
+                buffer.push(encoded_state, action_id, reward, next_encoded, done, next_mask)
                 
                 if len(buffer) > MIN_BUFFER_SIZE:
                     model.train()
                     losses.append(trainer.train_step(BATCH_SIZE))
                     trainer.update_target_network()
 
-                episode_reward += custom_reward
+                episode_reward += reward
                 state = next_state
             else:
                 opp_action = opp_policy(env)
