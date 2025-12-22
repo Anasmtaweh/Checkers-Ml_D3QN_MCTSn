@@ -32,17 +32,21 @@ import torch.optim as optim
 import numpy as np
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Optional, Tuple, Any
+
+# Add project root to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import project modules
 from checkers_env.env import CheckersEnv
 from checkers_agents.random_agent import CheckersRandomAgent
-from training.common.action_manager import ActionManager
-from training.common.board_encoder import CheckersBoardEncoder
-from training.common.buffer import ReplayBuffer
-from training.d3qn.model import D3QNModel
-from training.d3qn.trainer import D3QNTrainer
+from common.action_manager import ActionManager
+from common.board_encoder import CheckersBoardEncoder
+from common.buffer import ReplayBuffer
+from d3qn_legacy.d3qn.model import D3QNModel
+from d3qn_legacy.d3qn.trainer import D3QNTrainer
 
 
 # ════════════════════════════════════════════════════════════════════

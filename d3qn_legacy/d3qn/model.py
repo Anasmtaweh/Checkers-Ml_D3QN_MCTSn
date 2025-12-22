@@ -249,6 +249,10 @@ class D3QNModel:
         self.device = torch.device(device) if isinstance(device, str) else device
         self.online.to(self.device)
         self.target.to(self.device)
+        
+        # Manually update device attribute in sub-networks
+        self.online.device = self.device
+        self.target.device = self.device
         return self
 
     def save(self, path: str):

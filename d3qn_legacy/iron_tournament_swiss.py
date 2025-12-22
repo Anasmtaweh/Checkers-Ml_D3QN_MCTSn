@@ -19,22 +19,32 @@ import torch
 import numpy as np
 import os
 import glob
+import sys
+
+# Add project root to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from checkers_env.env import CheckersEnv
-from training.common.action_manager import ActionManager
-from training.common.board_encoder import CheckersBoardEncoder
-from training.d3qn.model import D3QNModel
+from common.action_manager import ActionManager
+from common.board_encoder import CheckersBoardEncoder
+from d3qn_legacy.d3qn.model import D3QNModel
 
 # ════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ════════════════════════════════════════════════════════════════════
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..'))
+
 DIRECTORIES_TO_SCAN = [
-    "checkpoints_iron_league_v3",  # Your new agents (500, 1000, 1500...)
-    "opponent_pool"                # Your old agents (Gen 7, Glass Cannon...)
+    os.path.join(SCRIPT_DIR, "opponent_pool"),
+    os.path.join(SCRIPT_DIR, "opponent_pool_backup"),
+    os.path.join(SCRIPT_DIR, "checkpoints_iron_league_v3"),
+    os.path.join(SCRIPT_DIR, "checkpoints_gen11_decisive")
 ]
 
 ROUNDS = 6               # Sufficient to rank 10-20 agents
-PAIRS_PER_MATCH = 5      # 5 Pairs = 10 Games total per match
+PAIRS_PER_MATCH = 50     # 50 Pairs = 100 Games total per match
 MAX_MOVES = 200          # Mercy rule
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -110,18 +120,30 @@ def play_game(env, p1, p2, manager):
         if done: return info.get('winner', 0)
 
 def run_match(p1, p2, env, manager):
-    print(f"   ⚔️  {p1.name:<25} vs {p2.name:<25}", end="", flush=True)
+    header = f"   ⚔️  {p1.name:<20} vs {p2.name:<20}"
+    print(f"{header} | Starting...", end="", flush=True)
+    
     s1, s2 = 0.0, 0.0
-    for _ in range(PAIRS_PER_MATCH):
+    total_games = PAIRS_PER_MATCH * 2
+    
+    for i in range(PAIRS_PER_MATCH):
         # Game 1: P1 Red
         r = play_game(env, p1.model, p2.model, manager)
         s1 += (1.0 if r==1 else 0.5 if r==0 else 0)
         s2 += (1.0 if r==-1 else 0.5 if r==0 else 0)
+        
+        # Update visuals (Game 1 of pair)
+        print(f"\r{header} | Game {i*2+1}/{total_games} | Score: {s1:.1f}-{s2:.1f}", end="", flush=True)
+        
         # Game 2: P2 Red
         r = play_game(env, p2.model, p1.model, manager)
         s2 += (1.0 if r==1 else 0.5 if r==0 else 0)
         s1 += (1.0 if r==-1 else 0.5 if r==0 else 0)
-    print(f" | Score: {s1}-{s2}")
+        
+        # Update visuals (Game 2 of pair)
+        print(f"\r{header} | Game {i*2+2}/{total_games} | Score: {s1:.1f}-{s2:.1f}", end="", flush=True)
+        
+    print(f"\r{header} | Final: {s1:.1f}-{s2:.1f} ({total_games} games)        ")
     return s1, s2
 
 def main():

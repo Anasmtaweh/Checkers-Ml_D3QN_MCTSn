@@ -5,26 +5,17 @@ import numpy as np
 from flask import Flask, render_template, jsonify, request
 
 # Add parent directory to path so we can import your existing modules
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from checkers_env.env import CheckersEnv
-from training.common.action_manager import ActionManager
-from training.common.board_encoder import CheckersBoardEncoder
-from training.d3qn.model import D3QNModel
+from common.action_manager import ActionManager
+from common.board_encoder import CheckersBoardEncoder
+from d3qn_legacy.d3qn.model import D3QNModel
 
 # Fix for TemplateNotFound: Explicitly define paths relative to this script
 base_dir = os.path.dirname(os.path.abspath(__file__))
-template_dir = os.path.join(base_dir, 'templates')
-static_dir = os.path.join(base_dir, 'static')
-
-# Auto-detect flat structure if folders are missing
-if not os.path.exists(template_dir):
-    print(f"⚠️  Template dir '{template_dir}' not found. Using '{base_dir}'")
-    template_dir = base_dir
-
-if not os.path.exists(static_dir):
-    print(f"⚠️  Static dir '{static_dir}' not found. Using '{base_dir}'")
-    static_dir = base_dir
+template_dir = base_dir
+static_dir = base_dir
 
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 
@@ -41,12 +32,12 @@ def load_available_models():
     """Scans folders for .pth files"""
     # Resolve root directory (one level up from web_interface)
     root_dir = os.path.abspath(os.path.join(base_dir, '..'))
+    project_root = os.path.abspath(os.path.join(root_dir, '..'))
 
     paths = [
         os.path.join(root_dir, "opponent_pool"),
-        os.path.join(root_dir, "checkpoints_iron_league_v3"),
-        os.path.join(root_dir, "checkpoints_iron_league"),
-        os.path.join(root_dir, "checkpoints")
+        os.path.join(project_root, "opponent_pool"),
+        os.path.join(root_dir, "checkpoints_gen11_decisive")
     ]
     model_files = {}
     for p in paths:

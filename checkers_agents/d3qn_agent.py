@@ -2,10 +2,10 @@ import torch
 import random
 from typing import Any, Dict, List, Tuple, Optional
 
-from training.d3qn.model import D3QNModel
-from training.common.board_encoder import CheckersBoardEncoder
-from training.common.action_manager import ActionManager
-from training.common.move_parser import parse_legal_moves
+from d3qn_legacy.d3qn.model import D3QNModel
+from common.board_encoder import CheckersBoardEncoder
+from common.action_manager import ActionManager
+from common.move_parser import parse_legal_moves
 
 Move = Tuple[Tuple[int, int], Tuple[int, int]]
 

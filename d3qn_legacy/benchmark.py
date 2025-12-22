@@ -6,12 +6,17 @@ benchmark.py - D3QN Checkers Champion Finder (STRICT & FIXED)
 import torch
 import os
 import glob
+import sys
 import numpy as np
+
+# Add project root to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from checkers_env.env import CheckersEnv
 from checkers_agents.random_agent import CheckersRandomAgent as RandomAgent
-from training.common.action_manager import ActionManager
-from training.common.board_encoder import CheckersBoardEncoder
-from training.d3qn.model import D3QNModel
+from common.action_manager import ActionManager
+from common.board_encoder import CheckersBoardEncoder
+from d3qn_legacy.d3qn.model import D3QNModel
 
 def find_matching_move(action_manager, action_id, legal_moves):
     """
@@ -45,7 +50,23 @@ def run_benchmark():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Benchmarking on {device} (Deterministic Mode)...\n")
     
-    checkpoints = sorted(glob.glob("checkpoints/*.pth"))
+    # Scan multiple directories for models
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(script_dir, '..'))
+    
+    search_patterns = [
+        os.path.join(project_root, "checkpoints", "*.pth"),
+        os.path.join(script_dir, "checkpoints_iron_league_v3", "*.pth"),
+        os.path.join(script_dir, "opponent_pool", "*.pth"),
+        os.path.join(project_root, "opponent_pool", "*.pth")
+    ]
+    
+    checkpoints = []
+    for pattern in search_patterns:
+        checkpoints.extend(glob.glob(pattern))
+    
+    checkpoints = sorted(list(set(checkpoints)))
+
     if not checkpoints:
         print("No checkpoints found!")
         return
