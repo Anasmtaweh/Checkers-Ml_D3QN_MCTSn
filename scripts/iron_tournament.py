@@ -24,10 +24,10 @@ import sys
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from checkers_env.env import CheckersEnv
-from common.action_manager import ActionManager
-from common.board_encoder import CheckersBoardEncoder
-from d3qn_legacy.d3qn.model import D3QNModel
+from core.game import CheckersEnv
+from core.action_manager import ActionManager
+from core.board_encoder import CheckersBoardEncoder
+from training.d3qn.model import D3QNModel
 
 # ════════════════════════════════════════════════════════════════════
 # CONFIGURATION

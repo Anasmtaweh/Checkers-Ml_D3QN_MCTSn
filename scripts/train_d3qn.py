@@ -33,6 +33,7 @@ import numpy as np
 import os
 import re
 import sys
+import random
 from pathlib import Path
 from typing import Optional, Tuple, Any
 
@@ -40,13 +41,22 @@ from typing import Optional, Tuple, Any
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import project modules
-from checkers_env.env import CheckersEnv
-from checkers_agents.random_agent import CheckersRandomAgent
-from common.action_manager import ActionManager
-from common.board_encoder import CheckersBoardEncoder
-from common.buffer import ReplayBuffer
-from d3qn_legacy.d3qn.model import D3QNModel
-from d3qn_legacy.d3qn.trainer import D3QNTrainer
+from core.game import CheckersEnv
+from core.action_manager import ActionManager
+from core.board_encoder import CheckersBoardEncoder
+from training.d3qn.buffer import ReplayBuffer
+from training.d3qn.model import D3QNModel
+from training.d3qn.trainer import D3QNTrainer
+
+
+class RandomAgent:
+    """Simple random opponent."""
+    def __init__(self):
+        pass
+    
+    def select_action(self, env):
+        legal_moves = env.get_legal_moves()
+        return random.choice(legal_moves) if legal_moves else None
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -331,7 +341,7 @@ def main():
     print("  ✓ D3QNTrainer")
 
     # Opponent (Random Agent)
-    opponent = CheckersRandomAgent()
+    opponent = RandomAgent()
     print("  ✓ RandomAgent (Opponent)")
 
     print("\n" + "="*70)

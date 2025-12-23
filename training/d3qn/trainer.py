@@ -3,9 +3,14 @@ import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
 
+
 class D3QNTrainer:
     """
     Dueling Double Deep Q-Network Trainer (Stabilized).
+
+    UPDATED FOR GEN 12 DUAL-HEAD:
+    - train_step() now accepts player_side parameter
+    - Passes player_side to model.online() and model.target()
     """
 
     def __init__(
@@ -34,27 +39,38 @@ class D3QNTrainer:
         self.loss_type = loss_type
         self.tau = tau
 
-    def train_step(self, batch_size):
+    def train_step(self, batch_size, player_side=1):
+        """
+        Single training step with DUAL-HEAD support.
+
+        UPDATED: Now accepts player_side to select which head (P1 or P2) to train.
+
+        Args:
+            batch_size: Number of transitions to sample
+            player_side: 1 for Red (P1), -1 for Black (P2)
+
+        Returns:
+            loss: Scalar loss value
+        """
         # 1. Sample
         state, action, reward, next_state, done, next_legal_mask = self.buffer.sample(batch_size)
 
-        # 2. Compute Current Q
-        q_values = self.model.online(state)
-        
-        # FIX: 'action' is already [batch, 1], so we don't need unsqueeze.
-        # We also keep q_value as [batch, 1] to match expected_q_value shape.
+        # 2. Compute Current Q (using player_side head)
+        q_values = self.model.online(state, player_side=player_side)
         q_value = q_values.gather(1, action)
 
-        # 3. Compute Target Q
+        # 3. Compute Target Q (Double DQN with player_side head)
         with torch.no_grad():
-            next_q_online = self.model.online(next_state)
+            # Online network selects action
+            next_q_online = self.model.online(next_state, player_side=player_side)
             next_q_online[~next_legal_mask] = -float('inf')
             next_action = next_q_online.argmax(1).unsqueeze(1)
-            
-            next_q_target = self.model.target(next_state)
+
+            # Target network evaluates action
+            next_q_target = self.model.target(next_state, player_side=player_side)
             next_q_value = next_q_target.gather(1, next_action)
-            
-            # This calculation stays [batch, 1]
+
+            # Bellman target
             expected_q_value = reward + self.gamma * next_q_value * (1 - done)
 
         # 4. Loss
@@ -69,5 +85,6 @@ class D3QNTrainer:
         return loss.item()
 
     def update_target_network(self):
+        """Soft update target network toward online network."""
         for target_param, online_param in zip(self.model.target.parameters(), self.model.online.parameters()):
             target_param.data.copy_(self.tau * online_param.data + (1.0 - self.tau) * target_param.data)

@@ -19,6 +19,7 @@ import torch.optim as optim
 import numpy as np
 import os
 import glob
+import re
 import random
 import csv
 import sys
@@ -36,24 +37,37 @@ sys.path.insert(0, PROJECT_ROOT)
 # IMPORTS
 # ════════════════════════════════════════════════════════════════════
 
-from checkers_env.env import CheckersEnv
-from checkers_agents.random_agent import CheckersRandomAgent
-from common.action_manager import ActionManager
-from common.board_encoder import CheckersBoardEncoder
-from common.buffer import ReplayBuffer
-from d3qn_legacy.d3qn.model import D3QNModel
-from d3qn_legacy.d3qn.trainer import D3QNTrainer
+from core.game import CheckersEnv
+from core.action_manager import ActionManager
+from core.board_encoder import CheckersBoardEncoder
+from training.d3qn.buffer import ReplayBuffer
+from training.d3qn.model import D3QNModel
+from training.d3qn.trainer import D3QNTrainer
+
+
+# ════════════════════════════════════════════════════════════════════
+# RANDOM AGENT
+# ════════════════════════════════════════════════════════════════════
+
+class RandomAgent:
+    """Simple agent that plays random moves."""
+    def select_action(self, env):
+        legal_moves = env.get_legal_moves()
+        if legal_moves:
+            return random.choice(legal_moves)
+        return None
+
 
 # ════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ════════════════════════════════════════════════════════════════════
 
 NUM_EPISODES = 15000           # Longer training for mastery
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 GAMMA = 0.99
 TAU = 0.001
-MAX_MOVES_PER_GAME = 800  # CHANGED from 500 (expert games need space)
-NO_CAPTURE_LIMIT = 80     # NEW: 40 moves per player = standard rule
+MAX_MOVES_PER_GAME = 600  # Global safety cap (position-based limits used in loop)
+NO_CAPTURE_LIMIT = 80     # 40 moves per player = standard rule
 
 EPSILON_START = 0.50           # Higher initial exploration
 EPSILON_END = 0.02             # Lower final exploration
@@ -80,26 +94,23 @@ def log_print(msg):
     print(msg, flush=True)
 
 def get_learning_rate(episode):
-    """5-phase learning rate schedule for Gen 12."""
-    if episode < 500:
-        return 2e-5      # Fast initial
+    if episode < 200:
+        return 1e-5
+    elif episode < 600:
+        return 2e-7      # REDUCED from 5e-7
     elif episode < 1500:
-        return 5e-6      # Standard learning
-    elif episode < 3000:
-        return 1e-6      # Refinement
-    elif episode < 6000:
-        return 5e-7      # Fine-tuning
+        return 5e-8      # REDUCED from 1e-7
     else:
-        return 1e-7      # Ultra-conservative
+        return 5e-7  # Reduced by 50%
 
 def get_opponent_probabilities(episode):
-    """Gen 12: More self-play for positional mastery."""
-    if episode < 1000:
-        return 0.55, 0.20, 0.25  # Balanced early
-    elif episode < 3000:
-        return 0.50, 0.15, 0.35  # More self-play
+    """Gen 12: Minimal self-play until mastery."""
+    if episode < 3000:
+        return 0.95, 0.03, 0.02  # 95% Random, 3% Pool, 2% Self
+    elif episode < 7000:
+        return 0.80, 0.10, 0.10  # 80% Random, 10% Pool, 10% Self
     else:
-        return 0.45, 0.15, 0.40  # Heavy self-play late
+        return 0.60, 0.20, 0.20  # 60% Random, 20% Pool, 20% Self
 
 def calculate_epsilon(episode):
     """Epsilon-greedy exploration schedule."""
@@ -156,11 +167,17 @@ def update_opponent_pool(checkpoint_dir, pool_dir, current_episode):
     log_print(f"✅ Added to pool: {pool_name}")
     
     # Keep only last 3 checkpoints in pool (clean old ones)
-    pool_files = sorted(glob.glob(os.path.join(pool_dir, "gen12_ep*.pth")))
+    pool_files = glob.glob(os.path.join(pool_dir, "gen12_ep*.pth"))
     
-    if len(pool_files) > 3:
+    def extract_episode(f):
+        m = re.search(r'ep(\d+)', f)
+        return int(m.group(1)) if m else -1
+
+    pool_files = sorted(pool_files, key=extract_episode)
+    
+    if len(pool_files) > 5:
         # Remove oldest checkpoints
-        for old_file in pool_files[:-3]:
+        for old_file in pool_files[:-5]:
             os.remove(old_file)
             log_print(f"🗑️ Removed old pool agent: {os.path.basename(old_file)}")
     
@@ -201,7 +218,7 @@ class OpponentManager:
         rand = random.random()
         
         if rand < prob_random:
-            return "Random", CheckersRandomAgent().select_action
+            return "Random", RandomAgent().select_action
         
         elif rand < prob_random + prob_pool:
             model_path = random.choice(self.pool_files)
@@ -213,7 +230,7 @@ class OpponentManager:
                 def pool_select(env): return self._model_select(self.opponent_model, env)
                 return f"Pool: {name}", pool_select
             except:
-                return "Random (Fallback)", CheckersRandomAgent().select_action
+                return "Random (Fallback)", RandomAgent().select_action
         
         else:
             def self_select(env): return self._model_select(current_online_model, env)
@@ -395,11 +412,22 @@ def main_training_loop():
                         log_print(f"  🔁 Repetition detected at step {step_count}, forcing loss")
                         break
 
-            # Timeout check (existing)
-            if step_count >= MAX_MOVES_PER_GAME:
+            # Position-based timeout check
+            state_board = env.board.get_state()
+            total_pieces = np.sum(state_board != 0)
+
+            # Adaptive move limit based on position complexity
+            if total_pieces <= 6:          # Endgame
+                position_move_limit = 600
+            elif total_pieces <= 12:       # Midgame
+                position_move_limit = 400
+            else:                          # Opening
+                position_move_limit = 300
+
+            if step_count >= position_move_limit:
                 done = True
                 info['winner'] = 0
-                log_print(f"  ⏱️ Timeout at {MAX_MOVES_PER_GAME} moves (extreme endgame)")
+                log_print(f"  ⏱️ Timeout at {step_count} moves ({total_pieces} pieces, limit {position_move_limit})")
                 break
 
             current_player = env.current_player
@@ -426,10 +454,26 @@ def main_training_loop():
                         move_key = (tuple(env_move[0]), tuple(env_move[1]))
                     move_history.append(move_key)
 
+                # Determine if move uses a king (before move execution)
+                is_king_move = False
+                if env_move:
+                    if isinstance(env_move, list):
+                        start_pos = env_move[0][0]
+                    else:
+                        start_pos = env_move[0]
+                    
+                    # Check piece at start_pos (1/-1 = Man, 2/-2 = King)
+                    # Access board array directly since is_king() method doesn't exist
+                    piece = env.board.board[start_pos[0], start_pos[1]]
+                    is_king_move = (abs(piece) == 2)
+
                 next_state, reward, done, info = env.step(env_move)
                 
-                # Track captures for 40-move rule
-                if reward >= 0.001:  # Any capture occurred
+                # ✅ FIX: Track captures for 40-move rule (AGENT TURN)
+                # Reset if capture (reward > 0) or pawn move (non-king move)
+                is_pawn_move = (abs(reward) < 0.001 and not is_king_move)
+
+                if reward >= 0.001 or is_pawn_move:
                     no_capture_count = 0
                 else:
                     no_capture_count += 1
@@ -439,30 +483,29 @@ def main_training_loop():
                     done = True
                     info['winner'] = 0
                     log_print(f"  📜 Draw by 40-move rule (no captures in {NO_CAPTURE_LIMIT} moves)")
-                    custom_reward = -0.5  # Moderate draw penalty
+                    custom_reward = -0.6  # Punish draws harder
                     
                     next_encoded = encoder.encode(next_state, player=agent_side)
                     next_mask = action_manager.make_legal_action_mask([])
                     buffer.push(encoded_state, action_id, custom_reward, next_encoded, True, next_mask)
                     break
                 
-                # REWARD SHAPING (Gen 12)
-                winner = info.get('winner', 0)
-                if done and winner == agent_side:
-                    custom_reward = 1.0
-                elif done and winner == -agent_side:
-                    custom_reward = -1.0
-                elif done:
-                    custom_reward = -0.5  # Draw (keep moderate)
-                else:
-                    if reward >= 0.01:
-                        custom_reward = 0.40  # Multi-jump (up from 0.30)
-                    elif reward >= 0.001:
-                        custom_reward = 0.20  # Single capture (up from 0.15)
-                    elif reward > 0:
-                        custom_reward = 0.04  # Minor gains (up from 0.03)
+                if done:
+                    winner = info.get('winner', 0)
+                    if winner == agent_side:
+                        custom_reward = 1.0  # Win
+                    elif winner == -agent_side:
+                        custom_reward = -1.0  # Loss
                     else:
-                        custom_reward = -0.010  # Living tax (up from -0.008)
+                        custom_reward = -0.5  # Draw penalty
+                else:
+                    # BALANCED in-game rewards (not too sparse, not too dense)
+                    if reward >= 0.01:  # Multi-jump
+                        custom_reward = 0.10
+                    elif reward >= 0.001:  # Single capture
+                        custom_reward = 0.05
+                    else:
+                        custom_reward = -0.0001  # NOT -0.002
                 
                 next_encoded = encoder.encode(next_state, player=agent_side)
                 next_mask = action_manager.make_legal_action_mask(env.get_legal_moves() if not done else [])
@@ -471,7 +514,7 @@ def main_training_loop():
                 
                 if len(buffer) > MIN_BUFFER_SIZE:
                     model.train()
-                    losses.append(trainer.train_step(BATCH_SIZE))
+                    losses.append(trainer.train_step(BATCH_SIZE, player_side=agent_side))
                     trainer.update_target_network()
 
                 episode_reward += custom_reward
@@ -481,7 +524,21 @@ def main_training_loop():
                 # Opponent's turn
                 opp_action = opp_policy(env)
                 if opp_action:
-                    state, _, done, info = env.step(opp_action)
+                    prev_state = env.board.get_state()
+                    state, opp_reward, done, info = env.step(opp_action)
+                    
+                    # ✅ FIX: Track captures for 40-move rule (OPPONENT TURN)
+                    if opp_reward >= 0.001:  # Opponent captured
+                        no_capture_count = 0
+                    else:
+                        no_capture_count += 1
+                    
+                    # Check 40-move rule after opponent move too
+                    if no_capture_count >= NO_CAPTURE_LIMIT:
+                        done = True
+                        info['winner'] = 0
+                        log_print(f"  📜 Draw by 40-move rule (no captures in {NO_CAPTURE_LIMIT} moves)")
+                        break
                 else:
                     done = True
 
@@ -500,9 +557,9 @@ def main_training_loop():
                     log_print(f"  [Q-Health] Max: {max_q:.2f} | Avg: {avg_q:.2f} | LR: {current_lr:.2e}")
 
                 # AUTO-BRAKE: Q-values getting too high
-                if max_q > 15.0 or avg_q > 5.0:
+                if max_q > 20.0 or avg_q > 7.0:
                     old_lr = optimizer.param_groups[0]['lr']
-                    new_lr = max(old_lr * 0.5, 1e-8)  # Cut LR in half, floor at 1e-8
+                    new_lr = max(old_lr * 0.5, 2e-8)  # Cut LR in half, floor at 1e-8
                     
                     for param_group in optimizer.param_groups:
                         param_group['lr'] = new_lr
@@ -511,7 +568,7 @@ def main_training_loop():
                     log_print(f"   Reducing LR: {old_lr:.2e} → {new_lr:.2e}")
 
                 # EMERGENCY STOP: Complete meltdown
-                if max_q > 30.0 or avg_q > 10.0:
+                if max_q > 50.0 or avg_q > 15.0:
                     log_print(f"🚨 CRITICAL FAILURE: Q-value explosion! Max: {max_q:.1f}, Avg: {avg_q:.1f}")
                     log_print(f"💾 Emergency save...")
                     torch.save({

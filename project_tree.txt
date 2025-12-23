@@ -1,0 +1,73 @@
+.
+├── agents
+│   ├── d3qn
+│   │   ├── DQN_CHAMPION_ep500_62pct_tournament.pth
+│   │   ├── gen11_decisive_500.pth
+│   │   ├── gen11_ep500_80vR_75vT_CHAMPION.pth
+│   │   ├── gen12_elite_1000.pth
+│   │   ├── gen12_elite_1500.pth
+│   │   ├── gen12_elite_2000.pth
+│   │   ├── gen12_elite_2500.pth
+│   │   ├── gen12_elite_3000.pth
+│   │   ├── gen12_elite_3500.pth
+│   │   ├── gen12_elite_500.pth
+│   │   ├── gen8_mirror_LEGACY.pth
+│   │   ├── gen8_titan_LEGACY.pth
+│   │   ├── gen9_champion_58vT.pth
+│   │   └── gen9_titan_62vT.pth
+│   └── README.md
+├── core
+│   ├── action_manager.py
+│   ├── board_encoder.py
+│   ├── board.py
+│   ├── game.py
+│   ├── __init__.py
+│   ├── move_parser.py
+│   └── rules.py
+├── data
+│   ├── archives
+│   │   ├── gen11_decisive_archive
+│   │   └── iron_league_archive
+│   ├── tournament_results
+│   └── training_logs
+│       ├── gen11_decisive_training.csv
+│       ├── gen12_elite_training.csv
+│       └── iron_league_nuclear.csv
+├── docs
+│   └── DQN_PROJECT_SUMMARY.md
+├── evaluation
+│   ├── benchmark.py
+│   ├── evaluate_agent.py
+│   ├── __init__.py
+│   ├── play_vs_mcts.py
+│   └── tournament.py
+├── project_tree.txt
+├── README.md
+├── REORGANIZATION_NOTES.md
+├── scripts
+│   ├── check_checkpoints.py
+│   ├── iron_tournament.py
+│   └── train_d3qn.py
+├── training
+│   ├── d3qn
+│   │   ├── agent.py
+│   │   ├── buffer.py
+│   │   ├── __init__.py
+│   │   ├── model.py
+│   │   ├── random_agent.py
+│   │   ├── self_play.py
+│   │   └── trainer.py
+│   └── mcts
+│       ├── __init__.py
+│       ├── mcts_agent.py
+│       └── mcts_node.py
+├── utils
+│   ├── __init__.py
+│   └── plot_logs.py
+└── web
+    ├── app.py
+    ├── game.js
+    ├── index.html
+    └── style.css
+
+18 directories, 53 files

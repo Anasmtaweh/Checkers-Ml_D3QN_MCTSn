@@ -5,12 +5,12 @@ import numpy as np
 from flask import Flask, render_template, jsonify, request
 
 # Add parent directory to path so we can import your existing modules
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from checkers_env.env import CheckersEnv
-from common.action_manager import ActionManager
-from common.board_encoder import CheckersBoardEncoder
-from d3qn_legacy.d3qn.model import D3QNModel
+from core.game import CheckersEnv
+from core.action_manager import ActionManager
+from core.board_encoder import CheckersBoardEncoder
+from training.d3qn.model import D3QNModel
 
 # Fix for TemplateNotFound: Explicitly define paths relative to this script
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -37,7 +37,11 @@ def load_available_models():
     paths = [
         os.path.join(root_dir, "opponent_pool"),
         os.path.join(project_root, "opponent_pool"),
-        os.path.join(root_dir, "checkpoints_gen11_decisive")
+        os.path.join(root_dir, "checkpoints_gen11_decisive"),
+        os.path.join(root_dir, "checkpoints_gen12_elite"),
+        os.path.join(root_dir, "checkpoints_iron_league_v3"),
+        os.path.join(project_root, "checkpoints"),
+        os.path.join(root_dir, "gen12_elite_3500")
     ]
     model_files = {}
     for p in paths:
