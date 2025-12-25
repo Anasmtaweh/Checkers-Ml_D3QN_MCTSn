@@ -158,3 +158,20 @@ class ActionManager:
         """Move to a different device."""
         self.device = torch.device(device)
         return self
+
+    def flip_move(self, move: Move) -> Move:
+        """
+        Flip a move 180 degrees (for P2 perspective correction).
+        (r, c) -> (7-r, 7-c)
+        
+        Args:
+            move: ((r1, c1), (r2, c2))
+            
+        Returns:
+            Flipped move tuple
+        """
+        start, end = move
+        return (
+            (7 - start[0], 7 - start[1]),
+            (7 - end[0], 7 - end[1])
+        )

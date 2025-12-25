@@ -58,6 +58,7 @@ class D3QNAgent:
     def select_action(self, board, player, legal_moves, epsilon: float = 0.0, info: Optional[Dict] = None) -> Tuple[Optional[Any], Optional[int]]:
         """
         Selects an action using an epsilon-greedy strategy.
+        Correctly handles Canonical Perspective (flipping) for Player 2.
 
         Args:
             board: The current board state (numpy array).
@@ -74,16 +75,36 @@ class D3QNAgent:
         if not mapping:
             return None, None
 
+        # Prepare Canonical Mask & Mapping
+        # If Player 2, the network sees a flipped board (P1 perspective).
+        # So we must flip the legal moves to match what the network expects to output.
+        if player == -1:
+            canonical_moves = [self.action_manager.flip_move(m) for m in normalized_moves]
+            mask = self.action_manager.make_legal_action_mask(canonical_moves)
+            
+            # Map Canonical ID -> Absolute ID
+            canonical_to_absolute = {}
+            for i, cm in enumerate(canonical_moves):
+                cid = self.action_manager.get_action_id(cm)
+                if cid >= 0:
+                    orig_move = normalized_moves[i]
+                    aid = self.action_manager.get_action_id(orig_move)
+                    canonical_to_absolute[cid] = aid
+        else:
+            # Player 1: Canonical = Absolute
+            mask = self.action_manager.make_legal_action_mask(normalized_moves)
+            canonical_to_absolute = None
+
         action_index = None
 
-        self.model.eval()  # Set model to evaluation mode
+        self.model.eval()
         with torch.no_grad():
             # Epsilon-greedy exploration
             if epsilon > 0 and random.random() < epsilon:
-                action_index = random.choice(list(mapping.keys()))
+                absolute_id = random.choice(list(mapping.keys()))
+                return mapping[absolute_id], absolute_id
             else:
                 # Greedy action selection (exploitation)
-                mask = self.action_manager.make_legal_action_mask(normalized_moves)
                 state = self.encoder.encode(board, player=player, info=info)
                 if state.dim() == 3:
                     state = state.unsqueeze(0)
@@ -94,20 +115,24 @@ class D3QNAgent:
                 # Defensive check for unstable model output
                 if torch.isnan(q_values).any() or torch.isinf(q_values).any():
                     print("Warning: NaN or Inf detected in Q-values during inference. Falling back to random action.")
-                    action_index = random.choice(list(mapping.keys()))
+                    absolute_id = random.choice(list(mapping.keys()))
+                    return mapping[absolute_id], absolute_id
                 else:
                     masked = q_values.clone()
                     masked[mask.unsqueeze(0) == 0] = -1e9
                     action_index = int(torch.argmax(masked, dim=1).item())
 
-        # Ensure chosen action_index maps to a legal move
-        if action_index is not None and action_index not in mapping:
-            action_index = random.choice(list(mapping.keys()))
-
+        # Convert Canonical Action Index -> Absolute Action Index -> Env Move
+        absolute_id = None
         if action_index is not None:
-            env_move = mapping.get(action_index)
-            if env_move is None:
-                action_index = random.choice(list(mapping.keys()))
-                env_move = mapping[action_index]
-            return env_move, action_index
-        return None, None
+            if player == -1 and canonical_to_absolute is not None:
+                absolute_id = canonical_to_absolute.get(action_index)
+            else:
+                absolute_id = action_index
+
+        if absolute_id is not None and absolute_id in mapping:
+            return mapping[absolute_id], absolute_id
+            
+        # Fallback
+        absolute_id = random.choice(list(mapping.keys()))
+        return mapping[absolute_id], absolute_id

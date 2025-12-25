@@ -1,6 +1,8 @@
 import os
 import sys
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from flask import Flask, render_template, jsonify, request
 
@@ -10,6 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from core.game import CheckersEnv
 from core.action_manager import ActionManager
 from core.board_encoder import CheckersBoardEncoder
+from core.move_parser import parse_legal_moves
 from training.d3qn.model import D3QNModel
 
 # Fix for TemplateNotFound: Explicitly define paths relative to this script
@@ -27,6 +30,37 @@ action_manager = ActionManager(device=device)
 encoder = CheckersBoardEncoder()
 agents_config = {"p1": "human", "p2": "human"}
 
+class LegacyDuelingDQN(nn.Module):
+    """Fallback for older single-head models."""
+    def __init__(self, action_dim, device):
+        super(LegacyDuelingDQN, self).__init__()
+        self.device = device
+        self.conv1 = nn.Conv2d(5, 32, 3, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, 3, padding=1)
+        self.conv3 = nn.Conv2d(64, 64, 3, padding=1)
+        self.flatten_size = 64 * 8 * 8
+        self.fc_norm = nn.LayerNorm(self.flatten_size)
+        self.value_fc1 = nn.Linear(self.flatten_size, 512)
+        self.value_fc2 = nn.Linear(512, 1)
+        self.advantage_fc1 = nn.Linear(self.flatten_size, 512)
+        self.advantage_fc2 = nn.Linear(512, action_dim)
+        self.to(device)
+
+    def forward(self, x):
+        if x.dim() == 3: x = x.unsqueeze(0)
+        x = x.to(self.device)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = x.view(x.size(0), -1)
+        x = self.fc_norm(x)
+        val = self.value_fc2(F.relu(self.value_fc1(x)))
+        adv = self.advantage_fc2(F.relu(self.advantage_fc1(x)))
+        return val + (adv - adv.mean(dim=1, keepdim=True))
+
+    def get_q_values(self, state, player_side=1):
+        return self.forward(state)
+
 # --- MODEL LOADER ---
 def load_available_models():
     """Scans folders for .pth files"""
@@ -41,7 +75,8 @@ def load_available_models():
         os.path.join(root_dir, "checkpoints_gen12_elite"),
         os.path.join(root_dir, "checkpoints_iron_league_v3"),
         os.path.join(project_root, "checkpoints"),
-        os.path.join(root_dir, "gen12_elite_3500")
+        os.path.join(root_dir, "gen12_elite_3500"),
+        os.path.join(root_dir, "agents", "d3qn")
     ]
     model_files = {}
     for p in paths:
@@ -63,11 +98,22 @@ def load_agent(name, path):
         model = D3QNModel(action_manager.action_dim, device)
         checkpoint = torch.load(path, map_location=device)
         
-        # Handle different checkpoint formats
-        if isinstance(checkpoint, dict) and 'model_online' in checkpoint:
-            model.online.load_state_dict(checkpoint['model_online'])
+        state_dict = None
+        if isinstance(checkpoint, dict):
+            if 'model_online' in checkpoint: state_dict = checkpoint['model_online']
+            elif 'online' in checkpoint: state_dict = checkpoint['online']
+            elif 'online_model_state_dict' in checkpoint: state_dict = checkpoint['online_model_state_dict']
+            else: state_dict = checkpoint
         else:
-            model.online.load_state_dict(checkpoint)
+            state_dict = checkpoint
+
+        try:
+            model.online.load_state_dict(state_dict)
+        except RuntimeError:
+            # Fallback to Legacy
+            print(f"⚠️  Legacy model detected: {name}")
+            model = LegacyDuelingDQN(action_manager.action_dim, device).to(device)
+            model.load_state_dict(state_dict)
         
         model.eval()
         return model
@@ -134,12 +180,46 @@ def get_move():
         if model:
             state_tensor = encoder.encode(env.board.get_state(), current_player).unsqueeze(0).to(device)
             with torch.no_grad():
-                q_values = model.online(state_tensor)
+                if hasattr(model, 'online'):
+                    # Pass player_side if model supports it (Gen 12)
+                    try:
+                        q_values = model.online(state_tensor, player_side=1 if current_player == 1 else -1)
+                    except TypeError:
+                        q_values = model.online(state_tensor)
+                else:
+                    try:
+                        q_values = model(state_tensor, player_side=1 if current_player == 1 else -1)
+                    except TypeError:
+                        q_values = model(state_tensor)
+            
+            # --- FIX FOR P2 PERSPECTIVE ---
+            if current_player == -1:
+                # 1. Flip legal moves to Canonical (P1) perspective
+                normalized_moves, mapping = parse_legal_moves(legal_moves, action_manager)
+                
+                canonical_moves = [action_manager.flip_move(m) for m in normalized_moves]
+                mask = action_manager.make_legal_action_mask(canonical_moves).to(device)
+                
+                # Map Canonical ID -> Absolute ID
+                canonical_to_absolute = {}
+                for i, cm in enumerate(canonical_moves):
+                    cid = action_manager.get_action_id(cm)
+                    if cid >= 0:
+                        orig_move = normalized_moves[i]
+                        aid = action_manager.get_action_id(orig_move)
+                        canonical_to_absolute[cid] = aid
+            else:
+                # P1: Canonical = Absolute
+                mask = action_manager.make_legal_action_mask(legal_moves).to(device)
+                canonical_to_absolute = None
             
             # Mask illegal moves
-            mask = action_manager.make_legal_action_mask(legal_moves).to(device)
             q_values[0, ~mask] = -float('inf')
             action_id = int(q_values.argmax().item())
+            
+            # If P2, action_id is Canonical. We need to map it back to Absolute.
+            if current_player == -1 and canonical_to_absolute is not None:
+                action_id = canonical_to_absolute.get(action_id, -1)
             
             # Translate ID back to Move
             move_struct = action_manager.get_move_from_id(action_id)
@@ -152,6 +232,10 @@ def get_move():
                      if (tuple(lm[0]), tuple(lm[1])) == move_struct: selected_move = lm; break
             
             if not selected_move: selected_move = legal_moves[0] # Fallback
+        else:
+            # Fallback if model failed to load
+            import random
+            selected_move = random.choice(legal_moves)
             
     # Apply Move
     state, reward, done, info = env.step(selected_move)
