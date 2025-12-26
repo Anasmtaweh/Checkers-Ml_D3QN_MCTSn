@@ -424,27 +424,27 @@
                     <li>Implement Double DQN with Dueling architecture for improved Q-value estimates</li>
                     <li>Create a robust training infrastructure with experience replay and legal move masking</li>
                     <li>Identify and overcome reward hacking and training instabilities</li>
-                    <li>Achieve competitive performance against random baselines</li>
+                    <li>Achieve competitive performance against random baselines (Note: Goal is technical competency, not superhuman play)</li>
                     <li>Enable self-play training with curriculum learning</li>
                 </ul>
                 
-                <h3>Key Achievements</h3>
+                <h3>Key Achievements & Lessons</h3>
                 <div class="grid">
                     <div class="card">
-                        <h4>✅ Stable Training</h4>
-                        <p>Successfully trained D3QN agent with controlled loss curves and reward convergence across 10,000+ episodes</p>
+                        <h4>✅ Stable Infrastructure</h4>
+                        <p>Built a production-ready D3QN pipeline that solved initial reward hacking and numerical instability.</p>
                     </div>
                     <div class="card">
-                        <h4>🏆 Strong Performance</h4>
-                        <p>Achieved 90%+ win rate against random opponent after convergence</p>
+                        <h4>🏆 High Baseline WR</h4>
+                        <p>Achieved 95%+ win rate against Random Agents (though plateaued against stronger opponents).</p>
                     </div>
                     <div class="card">
-                        <h4>🔍 Deep Learning</h4>
-                        <p>Discovered reward hacking phenomenon and developed fixes through empirical analysis</p>
+                        <h4>🔍 Critical Analysis</h4>
+                        <p>Identified why self-play fails without a strong teacher (The "Random-Killer" Trap).</p>
                     </div>
                     <div class="card">
-                        <h4>⚡ Optimized Infrastructure</h4>
-                        <p>Created GPU-optimized training pipeline with CPU-based replay buffer and efficient batch sampling</p>
+                        <h4>⚡ Reward Engineering</h4>
+                        <p>Discovered the "Zero-Sum Draw" flaw that causes passive play in RL agents.</p>
                     </div>
                 </div>
                 
@@ -531,13 +531,13 @@ Dueling Streams (Parallel Processing)
     └─ Advantage Stream (Action Advantage)
         ├─ FC(256→128)
         ├─ ReLU
-        └─ FC(128→170) → A(s,a)
+        └─ FC(128→168) → A(s,a)
 
 Q-Value Aggregation
     Q(s,a) = V(s) + [A(s,a) - mean(A(s,a))]
     └─ Output scaling: × 0.1 (prevent explosion)
 
-Final Output: (Batch, 170) - Q-values for all actions</div>
+Final Output: (Batch, 168) - Q-values for all actions</div>
                 
                 <h3>Architecture Parameters</h3>
                 <div class="grid">
@@ -548,7 +548,7 @@ Final Output: (Batch, 170) - Q-values for all actions</div>
                     </div>
                     <div class="card">
                         <h4>Action Space</h4>
-                        <div class="stat-number">170</div>
+                        <div class="stat-number">168</div>
                         <div class="stat-label">Discrete Actions</div>
                     </div>
                     <div class="card">
@@ -772,77 +772,107 @@ Final Output: (Batch, 170) - Q-values for all actions</div>
                     <p><strong>Episodes Trained:</strong> ~6,000</p>
                 </div>
                 
-                <div class="generation-block gen5">
-                    <div class="generation-title">Generation 6: "Logical Economy" System</div>
-                    <p><strong>Objective:</strong> Implement principled reward function preventing exploitation</p>
-                    <p><strong>Architecture:</strong> Four reward tiers based on capture counts:</p>
-                    <ul>
-                        <li><strong>Tier 1 (0-2 captures):</strong> Base terminal rewards only (Win +100, Loss -75)</li>
-                        <li><strong>Tier 2 (3-8 captures):</strong> Single capture bonus: +5</li>
-                        <li><strong>Tier 3 (9-20 captures):</strong> Double-jump bonus: +20</li>
-                        <li><strong>Tier 4 (21+ captures):</strong> Multi-chain bonus: +40</li>
-                    </ul>
-                    <p><strong>Results:</strong> 85%+ win rate maintained over 5,000 episodes</p>
+                <div class="generation-block gen6">
+                    <div class="generation-title">Generation 6.5: "Logical Economy" System (Failed)</div>
+                    <p><strong>Objective:</strong> Implement principled reward function to prevent exploitation.</p>
+                    <p><strong>Architecture:</strong> Four reward tiers based on capture counts (Tier 1-4).</p>
+                    <p><strong>Reward Structure:</strong> Win +100, Loss -75, Multi-Jump +20, Single +5.</p>
+                    <p><strong>Results:</strong> <span style="color: red; font-weight: bold;">FAILED.</span> Reward hacking persisted.</p>
+                    <p><strong>Analysis:</strong> The agent learned to "farm" captures (collecting +20 bonuses) and then intentionally lose (-75), netting positive rewards (+5 to +30) per episode.</p>
                     <p><strong>Episodes Trained:</strong> ~7,000</p>
-                    <p><strong>Key Achievement:</strong> Eliminated reward hacking while keeping tactical bonuses</p>
+                    <p><strong>Key Lesson:</strong> "Logical Economy" created a <em>locally optimal adversarial equilibrium</em>.</p>
                 </div>
                 
-                <div class="generation-block gen6">
-                    <div class="generation-title">Generation 7: Refinement & Scaling</div>
-                    <p><strong>Objective:</strong> Scale training to 20,000+ episodes with stable performance</p>
+                <div class="generation-block gen7">
+                    <div class="generation-title">Generation 7: The Restructured Fix</div>
+                    <p><strong>Objective:</strong> Definitively solve reward hacking via reward normalization.</p>
                     <p><strong>Changes:</strong></p>
                     <ul>
-                        <li>Increased learning rate to 1×10⁻⁴ for faster learning</li>
-                        <li>Refined epsilon decay: 1.0 → 0.05 over 2,000 episodes</li>
-                        <li>Checkpointing every 500 episodes</li>
-                        <li>Better logging and progress tracking</li>
+                        <li><strong>Normalized Rewards:</strong> WIN = +1.0, LOSS = -1.0 (Hard penalty)</li>
+                        <li><strong>Auxiliary Captures:</strong> Scaled down to +0.01 (100x smaller)</li>
+                        <li><strong>Refined Epsilon:</strong> 1.0 → 0.05 over 2,000 episodes</li>
                     </ul>
-                    <p><strong>Results:</strong> Consistent 90%+ win rate from episode 5,000 onward</p>
+                    <p><strong>Results:</strong> <span style="color: green; font-weight: bold;">SUCCESS.</span> Consistent 90%+ win rate. Reward hacking impossible due to Loss penalty (-1.0) outweighing any captures.</p>
                     <p><strong>Episodes Trained:</strong> 20,000+</p>
                     <p><strong>Key Metric:</strong> <code>Best Model @ Ep. 18,500: 96.2% win rate vs random</code></p>
                 </div>
                 
+                <div class="generation-block gen8">
+                    <div class="generation-title">Generation 8: "Titan" Baseline</div>
+                    <p><strong>Identity:</strong> <code>gen8_titan</code> (Checkpoint @ Ep 2,500)</p>
+                    <p><strong>Role:</strong> Previous main champion, now retired to the Opponent Pool as a strong baseline.</p>
+                    <p><strong>Performance:</strong></p>
+                    <ul>
+                        <li><strong>Tournament Rank:</strong> 4th (58.3% Win Rate)</li>
+                        <li><strong>Vs Random:</strong> ~90% Win Rate</li>
+                    </ul>
+                    <p><strong>Architecture:</strong> Dueling D3QN with ~168 discrete action IDs.</p>
+                    <p><strong>Usage:</strong> Serves as the primary evaluation baseline for all subsequent generations.</p>
+                </div>
+
+                <div class="generation-block gen9">
+                    <div class="generation-title">Generation 9: "Titan" Iron League Champion</div>
+                    <p><strong>Identity:</strong> <code>gen9_titan</code> (Checkpoint @ Ep 4,500)</p>
+                    <p><strong>Status:</strong> <span style="color: gray; font-weight: bold;">FORMER CHAMPION (Surpassed).</span> Once the best deployment model, now consistently beaten by the simpler Gen 7 baseline.</p>
+                    <p><strong>Tournament Dominance:</strong></p>
+                    <ul>
+                        <li><strong>Rank:</strong> 3rd of 13 Agents</li>
+                        <li><strong>Win Rate:</strong> 45.8% (Fair Tournament)</li>
+                        <li><strong>Head-to-Head:</strong> 7.5 - 2.5 vs Gen 8 Titan, but loses to Gen 7.</li>
+                    </ul>
+                    <p><strong>Training Config (Phase 5):</strong></p>
+                    <ul>
+                        <li><strong>Q-Health Monitor:</strong> Auto-brake engaged when Max Q > 30.</li>
+                        <li><strong>Emergency Stop:</strong> Halted at Ep 4,700 (Max Q > 50) to prevent divergence.</li>
+                        <li><strong>Opponents:</strong> Mixed pool of Gen 7, 8, and early Gen 9.</li>
+                    </ul>
+                    <p><strong>Key Metric:</strong> <code>85.0% Win Rate vs Random (100 games)</code></p>
+                </div>
+                
                 <div class="generation-block gen10">
-                    <div class="generation-title">Generation 10: Self-Play Architecture</div>
-                    <p><strong>Objective:</strong> Implement multi-agent self-play training framework</p>
+                    <div class="generation-title">Generation 10: "Titan" Endgame Curriculum (Failed)</div>
+                    <p><strong>Objective:</strong> Fix late-game collapse via "Endgame Injection" curriculum.</p>
                     <p><strong>Architecture Changes:</strong></p>
                     <ul>
-                        <li>Opponent pool system (maintaining 5-10 previous generations)</li>
-                        <li>Curriculum: Start vs weak, progress to stronger agents</li>
-                        <li>Iron League tournament for competitive ranking</li>
-                        <li>Separate value heads for each generation</li>
+                        <li>Opponent pool system with 60% pool / 30% self-play mix.</li>
+                        <li><strong>Endgame Injection:</strong> 40% of games started with 6-10 pieces (synthetic endgames).</li>
+                        <li><strong>Auto-Brake:</strong> Learning rate reduction trigger to stop Q-value explosion.</li>
                     </ul>
-                    <p><strong>Training Strategy:</strong></p>
+                    <p><strong>Results:</strong> <span style="color: red; font-weight: bold;">FAILED.</span> Performance degraded vs Gen 9.</p>
+                    <p><strong>Failure Analysis:</strong></p>
                     <ul>
-                        <li>50% games vs weakest opponent (current best)</li>
-                        <li>30% games vs mid-strength opponents (Gen N-3 to N-1)</li>
-                        <li>20% games vs strongest archived opponent</li>
+                        <li><strong>Late-Game Collapse:</strong> Agent couldn't correlate early king positioning with endgame outcomes due to temporal credit assignment failure.</li>
+                        <li><strong>Learning Rate Crash:</strong> "Auto-brake" system was too aggressive (threshold 35.0), collapsing LR to 1e-8 and stopping learning.</li>
+                        <li><strong>Outcome:</strong> Gen 11 and Gen 9 remained dominant. Gen 10 became an "Endgame Specialist" that lost the opening.</li>
                     </ul>
-                    <p><strong>Results:</strong> Emergence of specialized strategies for different opponent types</p>
                     <p><strong>Episodes Trained:</strong> 50,000+</p>
-                    <p><strong>Key Achievement:</strong> Self-improving agent without external opponents</p>
                 </div>
                 
                 <div class="generation-block gen11">
-                    <div class="generation-title">Generation 11: Advanced Features & Optimization</div>
-                    <p><strong>Objective:</strong> Integrate MCTS with D3QN, implement curriculum learning</p>
-                    <p><strong>Changes:</strong></p>
+                    <div class="generation-title">Generation 11: The Decisive Update (Amplified Rewards)</div>
+                    <p><strong>Objective:</strong> Solve the "Draw Stagnation" and "Timeout Epidemic" via aggressive reward shaping.</p>
+                    <p><strong>Problem Identified:</strong> Previous agents learned to stall (16.3% timeout rate) because the living penalty was too small (-0.0001) relative to the risk of losing.</p>
+                    <p><strong>Critical Fixes:</strong></p>
                     <ul>
-                        <li>MCTS-guided rollouts for trajectory sampling</li>
-                        <li>Curriculum learning: simplified board → full complexity</li>
-                        <li>Prioritized Experience Replay (PER) for important transitions</li>
-                        <li>Advanced logging and visualization dashboard</li>
+                        <li><strong>Amplified Captures:</strong> Single (+0.25) and Multi (+0.50) rewards increased 3x to dominate Q-values.</li>
+                        <li><strong>Harsh Living Tax:</strong> Increased to -0.01 per move (100x stronger), forcing rapid play.</li>
+                        <li><strong>Draw Penalty:</strong> Equalized to -1.0 (same as Loss), making stalling unviable.</li>
+                        <li><strong>Dynamic Pool:</strong> Rolling window updates every 500 episodes to prevent stale meta.</li>
                     </ul>
-                    <p><strong>Architecture Updates:</strong></p>
+                    <p><strong>Results:</strong> Timeouts reduced to 0.8%. Game length stabilized at 65 steps.</p>
+                    <p><strong>Status:</strong> Decisive D3QN. Successfully solved the passive play issue, but strategic depth remains limited compared to human analysis.</p>
+                </div>
+
+                <div class="generation-block gen12" style="border-left-color: #e74c3c;">
+                    <div class="generation-title">Generation 12: "Elite" Series (Critical Failure)</div>
+                    <p><strong>Objective:</strong> Refine the "Decisive" logic with an elite opponent pool to push for superhuman performance.</p>
+                    <p><strong>Outcome:</strong> <span style="color: red; font-weight: bold;">CATASTROPHIC REGRESSION.</span></p>
+                    <p><strong>Tournament Performance:</strong></p>
                     <ul>
-                        <li>Increased conv filter sizes: 5→32→64→128</li>
-                        <li>Added residual connections between conv blocks</li>
-                        <li>Policy head for action selection guidance</li>
-                        <li>Value head improvements with multi-scale features</li>
+                        <li><strong>Win Rates:</strong> 16% - 33% (Bottom of the leaderboard).</li>
+                        <li><strong>Analysis:</strong> The models likely overfit to the specific quirks of Gen 11, losing the fundamental solidity of Gen 7. The aggressive "living tax" may have induced reckless behavior when not winning immediately.</li>
                     </ul>
-                    <p><strong>Results:</strong> Near-superhuman performance, 98%+ win rate</p>
-                    <p><strong>Episodes Trained:</strong> 100,000+</p>
-                    <p><strong>Key Innovations:</strong> Hybrid D3QN-MCTS approach, curriculum mastery</p>
+                    <p><strong>Lesson:</strong> Complexity does not equal capability. The simpler Gen 7 model remains superior.</p>
                 </div>
                 
                 <h3>Performance Trajectory</h3>
@@ -869,32 +899,39 @@ Final Output: (Batch, 170) - Q-values for all actions</div>
                         <td>❌ Reward Hack</td>
                     </tr>
                     <tr>
-                        <td>Gen 6</td>
+                        <td>Gen 6.5</td>
                         <td>7,000</td>
                         <td>85%</td>
                         <td>82%</td>
-                        <td>✅ Improving</td>
+                        <td>❌ Logical Economy Failure</td>
                     </tr>
                     <tr>
                         <td>Gen 7</td>
                         <td>20,000</td>
                         <td>96%</td>
                         <td>94%</td>
-                        <td>✅ Stable</td>
+                        <td>✅ <strong>Dominant Baseline</strong></td>
                     </tr>
                     <tr>
                         <td>Gen 10</td>
                         <td>50,000</td>
                         <td>93%</td>
                         <td>91%</td>
-                        <td>✅ Self-Play</td>
+                        <td>⚠️ High Draw Rate</td>
                     </tr>
                     <tr>
                         <td>Gen 11</td>
                         <td>100,000</td>
                         <td>98%</td>
                         <td>97%</td>
-                        <td>✅ Optimized</td>
+                        <td>⚠️ Good vs Random, Weak vs Gen 7</td>
+                    </tr>
+                    <tr>
+                        <td>Gen 12</td>
+                        <td>3,500</td>
+                        <td>33%</td>
+                        <td>16%</td>
+                        <td>🛑 <strong>Regression</strong></td>
                     </tr>
                 </table>
             </section>
@@ -992,32 +1029,37 @@ target_q = target_network(next_states)[best_action]</pre>
                     <li><strong>γ=0.995:</strong> Long-term optimization, slower convergence, better endgame play</li>
                 </ul>
                 
-                <h3>7. Epsilon Decay vs Learning Rate Balance</h3>
-                <p><strong>Finding:</strong> Different hyperparameter regimes require different exploration schedules:</p>
-                <ul>
-                    <li><strong>High LR (1×10⁻⁴):</strong> Fast learning → low ε_decay (1.0→0.05 over 2K episodes)</li>
-                    <li><strong>Low LR (1×10⁻⁵):</strong> Slow learning → high ε_decay (1.0→0.05 over 5K episodes)</li>
-                    <li><strong>Mismatch (fast learning + slow exploration):</strong> Agent overfits to early strategies</li>
-                </ul>
-                
-                <h3>8. Self-Play Curriculum Learning</h3>
-                <div class="success">
-                    <strong>Discovery:</strong> Training against progressively stronger opponents enables discovery of novel strategies.
+                <h3>7. The "Random-Agent Trap"</h3>
+                <div class="warning">
+                    <strong>Critical Insight:</strong> Agents trained against Random opponents achieve high win rates (98%) but learn brittle strategies.
                 </div>
                 
-                <p><strong>Iron League Results (Gen 10+):</strong></p>
+                <p><strong>Mechanism:</strong></p>
                 <ul>
-                    <li>Gen 10.0 beats Gen 9.x: 65% win rate</li>
-                    <li>Gen 10.1 beats Gen 10.0: 58% win rate</li>
-                    <li>Gen 10.2 beats Gen 10.1: 52% win rate</li>
-                    <li>Indicates: Each generation learns specialized counters to previous version</li>
+                    <li>Random agents make blunders (giving up pieces) frequently.</li>
+                    <li>The D3QN agent learns: "If I wait, the opponent will eventually kill themselves."</li>
+                    <li><strong>Result:</strong> The agent becomes a "Counter-Puncher" that cannot initiate attacks. When playing against another D3QN agent that *doesn't* blunder, it doesn't know how to force a win.</li>
                 </ul>
                 
-                <p><strong>Strategy Specialization Observed:</strong></p>
+                <h3>8. The Zero-Reward Stagnation</h3>
+                <p><strong>Discovery:</strong> Our reward function set <code>Reward(Draw) = 0.0</code> and <code>Reward(Loss) = -1.0</code>.</p>
                 <ul>
-                    <li>Opening phase: Aggressive piece trading</li>
-                    <li>Mid-game: King promotion focus</li>
-                    <li>Endgame: Positional maneuvering and zugzwang</li>
+                    <li><strong>Behavior:</strong> In complex endgames, the agent calculated that trying to win carried a risk of losing (Reward -1.0).</li>
+                    <li><strong>Optimization:</strong> It realized that stalling for a draw (Reward 0.0) was strictly safer than risking a 49% chance of winning vs 51% chance of losing.</li>
+                    <li><strong>Outcome:</strong> Massive draw rates in Gen 10-12 tournaments. The agents refused to take risks.</li>
+                </ul>
+                
+                <h3>9. Self-Play Local Optima</h3>
+                <div class="info">
+                    <strong>Lesson:</strong> "Iron sharpening Iron" only works if the iron is already hard.
+                </div>
+                
+                <p><strong>Observation:</strong> We populated our Self-Play Opponent Pool with Gen 1-9 models (which were "Random-Killers").</p>
+                <ul>
+                    <li>Gen 10+ learned to beat Gen 9.</li>
+                    <li>Gen 11 learned to beat Gen 10.</li>
+                    <li>But Gen 9 was fundamentally flawed (see point 7).</li>
+                    <li><strong>Conclusion:</strong> We were optimizing for a flawed metric. We improved at beating bad agents, not at playing Checkers.</li>
                 </ul>
             </section>
             
@@ -1049,18 +1091,17 @@ target_q = target_network(next_states)[best_action]</pre>
                 
                 <div class="generation-block gen7">
                     <div class="generation-title">Layer 2: Agent Interfaces</div>
-                    <p><strong>Classes:</strong> CheckersRandomAgent, D3QNAgent, MCTSAgent (stub)</p>
+                    <p><strong>Classes:</strong> RandomAgent, D3QNAgent</p>
                     <p><strong>Responsibilities:</strong></p>
                     <ul>
                         <li>Consistent action selection interface</li>
                         <li>Legal move filtering and safety checks</li>
                         <li>Checkpoint loading and model inference</li>
                     </ul>
-                    <p><strong>Action Selection Modes:</strong></p>
+                    <p><strong>Action Selection:</strong></p>
                     <ul>
-                        <li><strong>Random:</strong> Uniform selection from legal moves</li>
-                        <li><strong>D3QN Deterministic:</strong> argmax Q-values with legal masking</li>
-                        <li><strong>D3QN Stochastic:</strong> ε-greedy exploration</li>
+                        <li><strong>RandomAgent:</strong> Selects uniformly from legal moves.</li>
+                        <li><strong>D3QNAgent:</strong> Uses epsilon-greedy strategy (Deterministic when ε=0, Stochastic exploration when ε>0) with legal action masking.</li>
                     </ul>
                 </div>
                 
@@ -1214,7 +1255,7 @@ target_q = target_network(next_states)[best_action]</pre>
                 <h2>📊 Evaluation & Performance Metrics</h2>
                 
                 <h3>Tournament Ranking (Dec 2025 - Fair Tournament)</h3>
-                <p>Results from 390-game round-robin tournament (Margin of Error &lt; 5%)</p>
+                <p>Results from 480-game round-robin tournament. <span style="color: red; font-weight: bold;">CRITICAL FINDING:</span> Older Gen 7 model dominates newer generations.</p>
                 <table>
                     <tr>
                         <th>Rank</th>
@@ -1226,118 +1267,122 @@ target_q = target_network(next_states)[best_action]</pre>
                     </tr>
                     <tr>
                         <td>1</td>
-                        <td>gen11_decisive_500</td>
-                        <td>53.8%</td>
-                        <td>46.2%</td>
-                        <td>50.0%</td>
-                        <td>7.7%</td>
+                        <td>gen7_specialist (The "Old Master")</td>
+                        <td>66.7%</td>
+                        <td>66.7%</td>
+                        <td>66.7%</td>
+                        <td>0.0%</td>
                     </tr>
                     <tr>
                         <td>2</td>
-                        <td>gen11_ep500_80vR_75vT_CHAMPION</td>
-                        <td>53.8%</td>
-                        <td>46.2%</td>
+                        <td>gen11_decisive_500</td>
+                        <td>41.7%</td>
+                        <td>58.3%</td>
                         <td>50.0%</td>
-                        <td>7.7%</td>
+                        <td>16.7%</td>
                     </tr>
                     <tr>
                         <td>3</td>
                         <td>gen9_titan_62vT</td>
-                        <td>46.2%</td>
-                        <td>53.8%</td>
-                        <td>50.0%</td>
-                        <td>7.7%</td>
+                        <td>33.3%</td>
+                        <td>58.3%</td>
+                        <td>45.8%</td>
+                        <td>25.0%</td>
                     </tr>
                     <tr>
                         <td>4</td>
-                        <td>DQN_CHAMPION_ep500_62pct_tournament</td>
-                        <td>53.8%</td>
-                        <td>46.2%</td>
-                        <td>50.0%</td>
-                        <td>7.7%</td>
+                        <td>gen9_champion_58vT</td>
+                        <td>25.0%</td>
+                        <td>66.7%</td>
+                        <td>45.8%</td>
+                        <td>41.7%</td>
                     </tr>
                     <tr>
                         <td>5</td>
-                        <td>gen9_champion_58vT</td>
-                        <td>7.7%</td>
-                        <td>84.6%</td>
-                        <td>46.2%</td>
-                        <td>76.9%</td>
-                    </tr>
-                    <tr>
-                        <td>6</td>
                         <td>gen12_elite_3500</td>
-                        <td>38.5%</td>
-                        <td>38.5%</td>
-                        <td>38.5%</td>
+                        <td>33.3%</td>
+                        <td>33.3%</td>
+                        <td>33.3%</td>
                         <td>0.0%</td>
                     </tr>
                     <tr>
+                        <td>6</td>
+                        <td>gen12_elite_2500</td>
+                        <td>33.3%</td>
+                        <td>25.0%</td>
+                        <td>29.2%</td>
+                        <td>8.3%</td>
+                    </tr>
+                    <tr>
                         <td>7</td>
-                        <td>gen12_elite_3000</td>
-                        <td>30.8%</td>
-                        <td>38.5%</td>
-                        <td>34.6%</td>
-                        <td>7.7%</td>
+                        <td>gen12_elite_2000</td>
+                        <td>41.7%</td>
+                        <td>8.3%</td>
+                        <td>25.0%</td>
+                        <td>33.3%</td>
                     </tr>
                     <tr>
                         <td>8</td>
-                        <td>gen12_elite_2000</td>
-                        <td>38.5%</td>
-                        <td>7.7%</td>
-                        <td>23.1%</td>
-                        <td>30.8%</td>
+                        <td>gen12_elite_3000</td>
+                        <td>25.0%</td>
+                        <td>25.0%</td>
+                        <td>25.0%</td>
+                        <td>0.0%</td>
                     </tr>
                     <tr>
                         <td>9</td>
-                        <td>gen12_elite_500</td>
-                        <td>23.1%</td>
-                        <td>15.4%</td>
-                        <td>19.2%</td>
-                        <td>7.7%</td>
+                        <td>gen8_titan_LEGACY</td>
+                        <td>33.3%</td>
+                        <td>8.3%</td>
+                        <td>20.8%</td>
+                        <td>25.0%</td>
                     </tr>
                     <tr>
                         <td>10</td>
-                        <td>gen8_titan_LEGACY</td>
-                        <td>23.1%</td>
-                        <td>15.4%</td>
-                        <td>19.2%</td>
-                        <td>7.7%</td>
+                        <td>gen12_elite_1500</td>
+                        <td>8.3%</td>
+                        <td>33.3%</td>
+                        <td>20.8%</td>
+                        <td>25.0%</td>
                     </tr>
                     <tr>
                         <td>11</td>
-                        <td>gen8_mirror_LEGACY</td>
-                        <td>23.1%</td>
-                        <td>15.4%</td>
-                        <td>19.2%</td>
-                        <td>7.7%</td>
+                        <td>gen12_elite_1000</td>
+                        <td>25.0%</td>
+                        <td>16.7%</td>
+                        <td>20.8%</td>
+                        <td>8.3%</td>
                     </tr>
                     <tr>
                         <td>12</td>
-                        <td>gen12_elite_2500</td>
-                        <td>23.1%</td>
-                        <td>15.4%</td>
-                        <td>19.2%</td>
-                        <td>7.7%</td>
+                        <td>gen12_elite_500</td>
+                        <td>16.7%</td>
+                        <td>16.7%</td>
+                        <td>16.7%</td>
+                        <td>0.0%</td>
                     </tr>
                     <tr>
                         <td>13</td>
-                        <td>gen12_elite_1500</td>
-                        <td>15.4%</td>
-                        <td>23.1%</td>
-                        <td>19.2%</td>
-                        <td>7.7%</td>
-                    </tr>
-                    <tr>
-                        <td>14</td>
-                        <td>gen12_elite_1000</td>
-                        <td>23.1%</td>
-                        <td>7.7%</td>
-                        <td>15.4%</td>
-                        <td>15.4%</td>
+                        <td>glass_cannon (Experimental)</td>
+                        <td>0.0%</td>
+                        <td>25.0%</td>
+                        <td>12.5%</td>
+                        <td>25.0%</td>
                     </tr>
                 </table>
                 
+                <div class="warning" style="border-left-color: #d63384; background-color: #fff0f6;">
+                    <strong>🚨 CRITICAL REGRESSION DETECTED</strong>
+                    <p>The latest tournament results reveal a shocking regression in the project's evolution. <strong>Gen 7 Specialist</strong> (an older model trained with simple normalized rewards) is crushing the sophisticated Gen 10-12 agents.</p>
+                    <p><strong>Why is Gen 7 winning?</strong></p>
+                    <ul>
+                        <li><strong>Simplicity:</strong> It uses a pure Win/Loss reward structure without complex "curriculum" or "endgame injection" noise.</li>
+                        <li><strong>Overfitting in Later Gens:</strong> Gen 10+ models were trained against specific "exploiters" (like Gen 9), creating a rock-paper-scissors dynamic where they forgot how to play fundamental checkers. Gen 7 plays solid, fundamental checkers.</li>
+                        <li><strong>The "Teacher" Problem:</strong> Later generations were "taught" by agents that had already learned bad habits (passive play, stalling). Gen 7 was trained before these bad habits solidified.</li>
+                    </ul>
+                    <p><strong>Conclusion:</strong> We must revert to the Gen 7 reward philosophy and abandon the current "Self-Play Curriculum" until we integrate a true external expert.</p>
+                </div>
+
                 <div class="card" style="margin-top: 40px; background: white; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
                     <div style="padding: 20px; border-bottom: 1px solid #eee;">
                         <h4 style="margin: 0; color: #333;">📊 Agent Performance Analysis</h4>
@@ -1411,121 +1456,48 @@ target_q = target_network(next_states)[best_action]</pre>
             
             <!-- CONCLUSION SECTION -->
             <section id="conclusion">
-                <h2>🎓 Conclusions & Future Directions</h2>
+                <h2>🎓 Conclusions & Critical Retrospective</h2>
                 
-                <h3>Project Success Metrics</h3>
+                <h3>Project Reality Check</h3>
                 <div class="grid">
                     <div class="card">
-                        <h4>✅ Architecture</h4>
-                        <p>Successfully designed and implemented D3QN with dueling streams, double Q-learning, and legal action masking</p>
+                        <h4>✅ Infrastructure Success</h4>
+                        <p>We built a robust, stable D3QN training pipeline that solved numerical instability and reward hacking. The <em>tool</em> works perfectly.</p>
                     </div>
                     <div class="card">
-                        <h4>✅ Stability</h4>
-                        <p>Overcame training instabilities (Q-value explosion, reward hacking) through systematic debugging and empirical analysis</p>
+                        <h4>❌ Model Regression</h4>
+                        <p>Contrary to expectations, <strong>Gen 7 (the simple baseline) outperforms Gen 12 (the complex iteration).</strong> Adding complexity (curriculum, specialized rewards) degraded performance.</p>
                     </div>
                     <div class="card">
-                        <h4>✅ Performance</h4>
-                        <p>Achieved 95%+ win rate against random baseline, demonstrating effective strategy learning</p>
+                        <h4>⚠️ The "Teacher" Trap</h4>
+                        <p>Self-play training failed because the agents learned to exploit each other's specific weaknesses (like passive play) rather than learning general checkers strategy.</p>
                     </div>
                     <div class="card">
-                        <h4>✅ Scalability</h4>
-                        <p>Trained successfully over 100,000+ episodes with self-play and curriculum learning</p>
+                        <h4>⚠️ The D3QN Ceiling</h4>
+                        <p>Pure value-based methods (DQN) struggle with the long-term planning required for Checkers endgames without an explicit search lookahead.</p>
                     </div>
                 </div>
                 
-                <h3>Key Learnings</h3>
+                <h3>Critical Analysis: Why We Failed to Improve</h3>
+                <p>Despite the advanced architecture in Gen 10, 11, and 12, performance did not just stagnate—it <strong>regressed</strong>. Our analysis identifies three critical bottlenecks:</p>
+                
                 <ol>
-                    <li><strong>Reward Design is Critical:</strong> Simple reward functions can lead to unintended exploits. Empirical testing and iterative refinement essential.</li>
-                    <li><strong>Numerical Stability Matters:</strong> Output scaling (0.1×) and reward normalization (1/100) prevented training collapse.</li>
-                    <li><strong>Legal Constraints are Powerful:</strong> Masking illegal actions improved performance by 15-20%, making environment structure explicit to the network.</li>
-                    <li><strong>Hardware Optimization Enables Scale:</strong> CPU buffer + GPU computation enabled 100K+ episode training on 6GB VRAM.</li>
-                    <li><strong>Self-Play Drives Progress:</strong> Multi-agent curriculum learning led to discovery of specialized strategies unavailable in single-opponent training.</li>
-                    <li><strong>Empirical Debugging Works:</strong> When training failed, running diagnostic games and analyzing rewards provided clear direction for fixes.</li>
+                    <li><strong>Loss of Fundamentals:</strong> 
+                        <br>Gen 7 learned "Checkers Fundamentals" (King safety, center control). Later generations learned "Meta-Gaming" (how to trick Gen 10 into a draw). When faced with a solid opponent (Gen 7), the "tricky" agents collapsed.
+                    </li>
+                    <li><strong>Reward Shaping Backfire:</strong> 
+                        <br>The aggressive "Living Tax" in Gen 11/12 was intended to force action. Instead, it likely caused agents to make reckless moves just to avoid the penalty, leading to material loss against a patient opponent.
+                    </li>
+                    <li><strong>Blind Optimization:</strong> 
+                        <br>We optimized for "Win Rate vs Previous Generation". This is a relative metric. We never checked if the "Previous Generation" was actually playing *good* checkers, or just *different* checkers.
+                    </li>
                 </ol>
-                
-                <h3>Technical Innovations</h3>
-                <ul>
-                    <li>✨ <strong>Legal Action Masking in Target Computation:</strong> Prevents unrealistic value estimates by ensuring target actions are legal</li>
-                    <li>✨ <strong>Canonicalization for Sample Efficiency:</strong> 2× effective sample count by always viewing board from same perspective</li>
-                    <li>✨ <strong>CPU-Based Replay Buffer:</strong> 90% VRAM savings without speed loss</li>
-                    <li>✨ <strong>"Logical Economy" Reward System:</strong> Four-tier reward structure preventing exploitation</li>
-                    <li>✨ <strong>Iron League Tournament System:</strong> Competitive ranking for self-play opponent pool</li>
-                </ul>
-                
-                <h3>Recommendations for Future Work</h3>
-                
-                <h4>Algorithmic Improvements</h4>
-                <ul>
-                    <li><strong>Prioritized Experience Replay (PER):</strong> Weight transitions by TD-error magnitude for faster learning</li>
-                    <li><strong>Noisy Networks:</strong> Replace ε-greedy with learned exploration noise in weights</li>
-                    <li><strong>Distributional RL (C51, QR-DQN):</strong> Learn return distributions instead of point estimates</li>
-                    <li><strong>Multi-step Returns:</strong> Use n-step TD bootstrapping for better credit assignment</li>
-                </ul>
-                
-                <h4>Architecture Enhancements</h4>
-                <ul>
-                    <li><strong>Attention Mechanisms:</strong> Allow network to focus on critical board regions</li>
-                    <li><strong>Residual Connections:</strong> Improve gradient flow in deeper networks</li>
-                    <li><strong>Policy Head:</strong> Joint training with policy gradient for action selection guidance</li>
-                    <li><strong>Value Head Improvements:</strong> Multi-scale feature fusion for better state evaluation</li>
-                </ul>
-                
-                <h4>MCTS Integration</h4>
-                <ul>
-                    <li><strong>AlphaZero-Style Approach:</strong> Combine D3QN value estimates with MCTS planning</li>
-                    <li><strong>Trajectory Sampling:</strong> Use MCTS rollouts for trajectory generation in replay buffer</li>
-                    <li><strong>Policy Distillation:</strong> Train policy network to mimic MCTS move distribution</li>
-                </ul>
-                
-                <h4>Training Optimization</h4>
-                <ul>
-                    <li><strong>Distributed Training:</strong> Multi-GPU self-play across multiple machines</li>
-                    <li><strong>Population-Based Training:</strong> Hyperparameter optimization via evolution</li>
-                    <li><strong>Skill Curriculum:</strong> Gradually increase opponent strength based on win rate</li>
-                    <li><strong>Transfer Learning:</strong> Pre-train on simpler games, fine-tune on checkers</li>
-                </ul>
-                
-                <h3>Expected Next Milestones</h3>
-                <table>
-                    <tr>
-                        <th>Milestone</th>
-                        <th>Target Performance</th>
-                        <th>Key Dependencies</th>
-                        <th>Timeline</th>
-                    </tr>
-                    <tr>
-                        <td>MCTS Integration</td>
-                        <td>98%+ vs random</td>
-                        <td>Implement tree search + rollout evaluation</td>
-                        <td>2-3 weeks</td>
-                    </tr>
-                    <tr>
-                        <td>Superhuman Play</td>
-                        <td>90%+ vs expert humans</td>
-                        <td>Self-play to convergence + extensive testing</td>
-                        <td>4-6 weeks</td>
-                    </tr>
-                    <tr>
-                        <td>Tournament System</td>
-                        <td>Ranked opponent pool</td>
-                        <td>Elo/Glicko rating, multi-agent framework</td>
-                        <td>3-4 weeks</td>
-                    </tr>
-                    <tr>
-                        <td>Open Source Release</td>
-                        <td>Public GitHub + documentation</td>
-                        <td>Code cleanup, comprehensive docs, tutorials</td>
-                        <td>2-3 weeks</td>
-                    </tr>
-                </table>
-                
+
                 <h3>Final Remarks</h3>
-                <p>This project demonstrates that deep reinforcement learning can successfully master complex games like checkers through careful algorithm design, robust implementation, and empirical debugging. The transition from simple supervised training (Gen 1-3) to self-play curriculum learning (Gen 10-11) shows the power of iterative development and principled engineering.</p>
+                <p>This project was a triumph of <strong>Software Engineering</strong> but a cautionary tale in <strong>Reinforcement Learning</strong>. We successfully built the car, but we drove it into a ditch by trusting self-play without a compass.</p>
                 
-                <p>The key insight from this journey: <strong>agent failures are features, not bugs</strong>. When the reward hacking occurred, rather than dismissing it as a training failure, we analyzed it systematically, discovered the underlying reward misalignment, and designed a solution. This approach—empirical debugging combined with theoretical understanding—is applicable to any deep RL project.</p>
-                
-                <div class="success">
-                    <strong>Summary:</strong> A complete, production-grade D3QN checkers AI system with 100,000+ episodes of training, self-play capability, and near-superhuman performance. Available for extension toward MCTS integration, distributed training, and tournament play.
+                <div class="info">
+                    <strong>Verdict:</strong> The project proves that <strong>Architecture < Curriculum</strong>. A simple model (Gen 7) with a clear objective beats a complex model (Gen 12) with a confused objective. The next phase must focus on <strong>Quality of Experience</strong> rather than Quantity of Training.
                 </div>
             </section>
             
@@ -1534,9 +1506,9 @@ target_q = target_network(next_states)[best_action]</pre>
         <footer>
             <p><strong>Checkers ML: D3QN Complete Documentation</strong></p>
             <p>Project by Anas Mtaweh | Location: Beirut, Lebanon</p>
-            <p>Repository: <a href="https://github.com/Anasmtaweh/Checkers-Ml_D3QN_MCTSn.git" target="_blank">GitHub - Checkers ML D3QN MCTS</a></p>
+            <p>Repository: <a href="https://github.com/Anasmtaweh/Checkers-Ml_D3QN_MCTSn.git" target="_blank">GitHub - Checkers ML D3QN</a></p>
             <p style="margin-top: 20px; font-size: 0.95em; opacity: 0.8;">
-                Generated: December 22, 2025 | Hardware: RTX 2060 + i7 10th Gen | Framework: PyTorch
+                Generated: December 26, 2025 | Hardware: RTX 2060 + i7 10th Gen | Framework: PyTorch
             </p>
         </footer>
     </div>
