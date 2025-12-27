@@ -198,7 +198,7 @@ class AlphaZeroTrainer:
                 temp = 0.0  # Play optimally in endgame
             
             # Get MCTS policy
-            action_probs, root = self.mcts.get_action_prob(env, temp=temp)
+            action_probs, root = self.mcts.get_action_prob(env, temp=temp, training=True)
             
             # Store current state and policy
             board = env.board.get_state()

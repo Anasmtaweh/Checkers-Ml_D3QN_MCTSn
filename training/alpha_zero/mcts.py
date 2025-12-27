@@ -80,7 +80,8 @@ class MCTS:
     """
     
     def __init__(self, model, action_manager, encoder, c_puct: float = 1.5, 
-                 num_simulations: int = 400, device: str = "cpu"):
+                 num_simulations: int = 400, device: str = "cpu",
+                 dirichlet_alpha: float = 0.3, dirichlet_epsilon: float = 0.25):
         """
         Initialize AlphaZero MCTS.
         
@@ -91,6 +92,8 @@ class MCTS:
             c_puct: Exploration constant for PUCT formula (typically 1.0-3.0)
             num_simulations: Number of MCTS simulations per move
             device: Device for tensor operations
+            dirichlet_alpha: Shape parameter for Dirichlet noise (0.3 for chess/checkers)
+            dirichlet_epsilon: Weight of noise mixing (0.25 = 25% noise, 75% neural policy)
         """
         self.model = model
         self.action_manager = action_manager
@@ -99,10 +102,14 @@ class MCTS:
         self.num_simulations = num_simulations
         self.device = device
         
+        # Dirichlet Noise parameters
+        self.dirichlet_alpha = dirichlet_alpha
+        self.dirichlet_epsilon = dirichlet_epsilon
+        
         # Set model to evaluation mode
         self.model.eval()
     
-    def get_action_prob(self, env, temp: float = 1.0) -> Tuple[np.ndarray, AlphaNode]:
+    def get_action_prob(self, env, temp: float = 1.0, training: bool = True) -> Tuple[np.ndarray, AlphaNode]:
         """
         Main entry point: Run MCTS and return action probability distribution.
         
@@ -119,6 +126,7 @@ class MCTS:
                   - temp = 1.0: Proportional to visit counts
                   - temp < 1.0: More exploitation (sharper distribution)
                   - temp → 0: Deterministic (argmax)
+            training: Whether to add Dirichlet noise (only in training)
         
         Returns:
             Tuple of (action_probabilities, root_node):
@@ -127,6 +135,13 @@ class MCTS:
         """
         # Create root node with current state
         root = AlphaNode(prior=1.0, state=env)
+        
+        # 1. EXPAND ROOT IMMEDIATELY (Critical for noise)
+        self._expand_node(root, env)
+        
+        # 2. ADD DIRICHLET NOISE (Only at the root, and only if training)
+        if training:
+            self._add_dirichlet_noise(root)
         
         # Run MCTS simulations
         for _ in range(self.num_simulations):
@@ -138,6 +153,26 @@ class MCTS:
         action_probs = self._get_action_distribution(root, temp)
         
         return action_probs, root
+    
+    def _add_dirichlet_noise(self, node: AlphaNode):
+        """
+        Injects Dirichlet noise into the root node's children priors.
+        Formula: P'(a) = (1 - ε) * P(a) + ε * Noise
+        
+        This prevents the network from becoming too confident in certain moves
+        too early, which can lead to premature convergence to suboptimal strategies
+        (like always playing for draws).
+        """
+        children = list(node.children.values())
+        if not children:
+            return
+            
+        # Generate noise from Dirichlet distribution
+        noise = np.random.dirichlet([self.dirichlet_alpha] * len(children))
+        
+        # Mix noise with existing priors
+        for i, child in enumerate(children):
+            child.prior = (1 - self.dirichlet_epsilon) * child.prior + self.dirichlet_epsilon * noise[i]
     
     def _search(self, node: AlphaNode, env) -> float:
         """
