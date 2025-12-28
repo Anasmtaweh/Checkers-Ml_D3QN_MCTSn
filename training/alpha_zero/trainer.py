@@ -235,8 +235,8 @@ class AlphaZeroTrainer:
             move_count += 1
             
             # Safety check: prevent infinite games
-            if move_count > 300:
-                print("  Warning: Game exceeded 300 moves, forcing draw")
+            if move_count > 150:
+                print("  Warning: Game exceeded 150 moves, forcing draw")
                 break
         
         # Determine winner

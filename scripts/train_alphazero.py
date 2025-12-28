@@ -93,7 +93,7 @@ os.makedirs(os.path.dirname(CSV_LOG_FILE), exist_ok=True)
 # Resume Configuration
 # Set to iteration number to resume from checkpoint, or None to start fresh
 # Example: 10 will load checkpoint_iter_10.pth and continue from iteration 11
-RESUME_FROM_ITERATION: Optional[int] = None
+RESUME_FROM_ITERATION: Optional[int] = 5
 
 
 # ════════════════════════════════════════════════════════════════════
