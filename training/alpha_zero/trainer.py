@@ -384,8 +384,8 @@ class AlphaZeroTrainer:
             # This removes exploration bias from training targets
             mcts_value = mcts_values[i]
             
-            # Flip value for Player 2 (Player 1's value is positive)
-            z = mcts_value if players[i] == 1 else -mcts_value
+            # MCTS already returns values from current player's view
+            z = mcts_value  # ✅ FIXED - no flip needed!
             
             self.replay_buffer.append((states[i].cpu(), policies[i], z))
     

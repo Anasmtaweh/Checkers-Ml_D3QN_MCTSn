@@ -1,2 +1,0 @@
-iteration,timestamp,p1_wins,p2_wins,draws,p1_win_rate,p2_win_rate,draw_rate,avg_game_length,total_loss,value_loss,policy_loss,buffer_size,elapsed_time_s
-1,2025-12-28 23:10:48,1,8,3,0.08333333333333333,0.6666666666666666,0.25,82.66666666666667,4.518897652626038,1.0751695096492768,4.357622170448304,992,693.277562379837
