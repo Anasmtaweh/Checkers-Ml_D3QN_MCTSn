@@ -77,7 +77,7 @@ BATCH_SIZE = ACTIVE_CONFIG['BATCH_SIZE']
 BUFFER_SIZE = ACTIVE_CONFIG['BUFFER_SIZE']
 
 # Loss Weights
-VALUE_LOSS_WEIGHT = 0.5        # Weight for value loss
+VALUE_LOSS_WEIGHT = 0.3        # Weight for value loss
 POLICY_LOSS_WEIGHT = 1.0       # Weight for policy loss
 
 # Logging and Checkpointing

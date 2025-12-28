@@ -105,7 +105,19 @@ class AlphaZeroTrainer:
         
         # Initialize Ray (if not already initialized)
         if not ray.is_initialized():
-            ray.init(num_cpus=4, num_gpus=1)  # Use 4 CPUs, 1 GPU
+            ray.init(
+                num_cpus=4, 
+                num_gpus=1,
+                include_dashboard=False,
+                # DISABLE METRICS EXPORTER (prevents error spam)
+                _metrics_export_port=None,
+                _system_config={
+                    "metrics_report_interval_ms": 0,
+                },
+                # Suppress logs
+                logging_level="ERROR",
+                log_to_driver=False
+            )
         
         if verbose:
             print(f"  Using Ray for parallel self-play (4 workers, GPU-accelerated)")
@@ -142,7 +154,7 @@ class AlphaZeroTrainer:
                 c_puct=c_puct,
                 num_simulations=num_sims,
                 device=device,
-                dirichlet_alpha=dirichlet_alpha,
+                dirichlet_alpha=0.8,
                 dirichlet_epsilon=dirichlet_epsilon
             )
             
@@ -155,7 +167,7 @@ class AlphaZeroTrainer:
             
             while not env.done:
                 move_count += 1
-                if move_count > 150:
+                if move_count > 120:
                     break
                 
                 temp = 1.0 if move_count <= temp_threshold else 0.0
@@ -326,8 +338,8 @@ class AlphaZeroTrainer:
             move_count += 1
             
             # Safety check: prevent infinite games
-            if move_count > 150:
-                print("  Warning: Game exceeded 150 moves, forcing draw")
+            if move_count > 120:
+                print("  Warning: Game exceeded 120 moves, forcing draw")
                 break
         
         # Determine winner

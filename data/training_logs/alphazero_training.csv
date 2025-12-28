@@ -1,1 +1,0 @@
-iteration,timestamp,p1_wins,p2_wins,draws,p1_win_rate,p2_win_rate,draw_rate,avg_game_length,total_loss,value_loss,policy_loss,buffer_size,elapsed_time_s
