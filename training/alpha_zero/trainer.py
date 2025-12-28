@@ -6,6 +6,7 @@ from collections import deque
 from typing import List, Tuple, Dict, Any, Optional
 import time
 import os
+import ray
 
 
 class AlphaZeroTrainer:
@@ -97,40 +98,131 @@ class AlphaZeroTrainer:
     # ================================================================
     
     def self_play(self, num_games: int, verbose: bool = True) -> Dict[str, Any]:
-        """
-        Play games against itself to generate training data.
+        """Self-play using Ray for parallel GPU execution."""
+        import time
         
-        This is the CRITICAL data generation phase:
-        1. Play full games using MCTS for move selection
-        2. Store (state, player, mcts_policy) during play
-        3. When game ends, compute value targets based on outcome
-        4. Add all (state, policy_target, value_target) to replay buffer
+        start_time = time.time()
         
-        Args:
-            num_games: Number of games to play
-            verbose: Whether to print progress
+        # Initialize Ray (if not already initialized)
+        if not ray.is_initialized():
+            ray.init(num_cpus=4, num_gpus=1)  # Use 4 CPUs, 1 GPU
         
-        Returns:
-            Dictionary with self-play statistics
-        """
-        from core.game import CheckersEnv
+        if verbose:
+            print(f"  Using Ray for parallel self-play (4 workers, GPU-accelerated)")
         
-        stats = {
+        # Prepare arguments
+        model_state = self.model.network.state_dict()
+        
+        # Create Ray remote function
+        @ray.remote(num_gpus=0.25)  # Each worker gets 25% GPU
+        def play_game_remote(model_state_dict, action_dim, c_puct, num_sims, 
+                            temp_threshold, dirichlet_alpha, dirichlet_epsilon):
+            import torch
+            from core.game import CheckersEnv
+            from core.action_manager import ActionManager
+            from core.board_encoder import CheckersBoardEncoder
+            from training.alpha_zero.network import AlphaZeroModel
+            from training.alpha_zero.mcts import MCTS
+            import numpy as np
+            
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            
+            # Create components
+            action_manager = ActionManager(device)
+            encoder = CheckersBoardEncoder()
+            model = AlphaZeroModel(action_dim, device)
+            model.network.load_state_dict(model_state_dict)
+            model.eval()
+            
+            # Create MCTS
+            mcts = MCTS(
+                model=model,
+                action_manager=action_manager,
+                encoder=encoder,
+                c_puct=c_puct,
+                num_simulations=num_sims,
+                device=device,
+                dirichlet_alpha=dirichlet_alpha,
+                dirichlet_epsilon=dirichlet_epsilon
+            )
+            
+            # Play game
+            env = CheckersEnv()
+            env.reset()
+            
+            states, players, policies = [], [], []
+            move_count = 0
+            
+            while not env.done:
+                move_count += 1
+                if move_count > 150:
+                    break
+                
+                temp = 1.0 if move_count <= temp_threshold else 0.0
+                action_probs, root = mcts.get_action_prob(env, temp=temp, training=True)
+                
+                board = env.board.get_state()
+                player = env.current_player
+                encoded_state = encoder.encode(board, player)
+                
+                states.append(encoded_state)
+                players.append(player)
+                policies.append(action_probs)
+                
+                legal_moves = env.get_legal_moves()
+                if temp == 0:
+                    action_id = int(np.argmax(action_probs))
+                else:
+                    action_id = int(np.random.choice(len(action_probs), p=action_probs))
+                
+                move = None
+                move_pair = action_manager.get_move_from_id(action_id)
+                for m in legal_moves:
+                    if action_manager._extract_start_landing(m) == move_pair:
+                        move = m
+                        break
+                
+                if move is None:
+                    move = legal_moves[0]
+                
+                env.step(move)
+            
+            _, winner = env._check_game_over()
+            
+            return {
+                'states': states,
+                'players': players,
+                'policies': policies,
+                'winner': winner
+            }
+        
+        # Launch parallel games
+        futures = []
+        for _ in range(num_games):
+            future = play_game_remote.remote(
+                model_state, 
+                self.action_manager.action_dim,
+                self.mcts.c_puct,
+                self.mcts.num_simulations,
+                self.temp_threshold,
+                self.mcts.dirichlet_alpha,
+                self.mcts.dirichlet_epsilon
+            )
+            futures.append(future)
+        
+        # Collect results
+        results = ray.get(futures)
+        
+        # Process results
+        stats: Dict[str, Any] = {
             'games_played': 0,
             'p1_wins': 0,
             'p2_wins': 0,
             'draws': 0,
-            'total_moves': 0,
-            'avg_game_length': 0.0,
-            'buffer_size': len(self.replay_buffer),
+            'total_moves': 0
         }
         
-        self.model.eval()  # Set to evaluation mode for self-play
-        
-        for game_idx in range(num_games):
-            game_data = self._play_single_game()
-            
-            # Update statistics
+        for game_data in results:
             stats['games_played'] += 1
             stats['total_moves'] += len(game_data['states'])
             
@@ -142,13 +234,9 @@ class AlphaZeroTrainer:
             else:
                 stats['draws'] += 1
             
-            # Add game data to replay buffer
             self._process_game_data(game_data)
-            
-            if verbose and (game_idx + 1) % 10 == 0:
-                print(f"  Self-play: {game_idx + 1}/{num_games} games complete")
         
-        # Compute final statistics
+        # Calculate stats
         stats['avg_game_length'] = stats['total_moves'] / stats['games_played']
         stats['buffer_size'] = len(self.replay_buffer)
         stats['p1_win_rate'] = stats['p1_wins'] / stats['games_played']
@@ -157,6 +245,8 @@ class AlphaZeroTrainer:
         
         self.training_stats['total_games'] += num_games
         
+        elapsed = time.time() - start_time
+        
         if verbose:
             print(f"\n  Self-Play Summary:")
             print(f"    P1 Wins: {stats['p1_wins']} ({stats['p1_win_rate']:.1%})")
@@ -164,6 +254,7 @@ class AlphaZeroTrainer:
             print(f"    Draws: {stats['draws']} ({stats['draw_rate']:.1%})")
             print(f"    Avg Game Length: {stats['avg_game_length']:.1f} moves")
             print(f"    Buffer Size: {stats['buffer_size']}")
+            print(f"  Self-play completed in {elapsed:.1f}s")
         
         return stats
     
@@ -705,3 +796,110 @@ if __name__ == "__main__":
     print("  • Combined policy + value loss training")
     print("  • Replay buffer management")
     print("  • Checkpoint save/load functionality")
+
+# ============================================================================
+# MULTIPROCESSING WORKER FUNCTION (Must be at module level)
+# ============================================================================
+
+def play_game_worker_func(args):
+    """Worker function that plays a single game."""
+    import torch
+    import numpy as np
+    from core.game import CheckersEnv
+    from core.action_manager import ActionManager
+    from core.board_encoder import CheckersBoardEncoder
+    from training.alpha_zero.network import AlphaZeroModel
+    from training.alpha_zero.mcts import MCTS
+    
+    # Unpack arguments
+    model_state = args['model_state']
+    action_dim = args['action_dim']
+    c_puct = args['c_puct']
+    num_simulations = args['num_simulations']
+    temp_threshold = args['temp_threshold']
+    dirichlet_alpha = args['dirichlet_alpha']
+    dirichlet_epsilon = args['dirichlet_epsilon']
+    device = args['device']
+    
+    # Create components
+    action_manager = ActionManager(device)
+    encoder = CheckersBoardEncoder()
+    
+    # Create model
+    model = AlphaZeroModel(action_dim, device)
+    model.network.load_state_dict(model_state)
+    model.eval()
+    
+    # Create MCTS
+    mcts = MCTS(
+        model=model,
+        action_manager=action_manager,
+        encoder=encoder,
+        c_puct=c_puct,
+        num_simulations=num_simulations,
+        device=device,
+        dirichlet_alpha=dirichlet_alpha,
+        dirichlet_epsilon=dirichlet_epsilon
+    )
+    
+    # Play game
+    env = CheckersEnv()
+    env.reset()
+    
+    states = []
+    players = []
+    policies = []
+    move_count = 0
+    
+    while not env.done:
+        move_count += 1
+        
+        # Force draw if too long
+        if move_count > 150:
+            break
+        
+        # Get temperature
+        temp = 1.0 if move_count <= temp_threshold else 0.0
+        
+        # MCTS search
+        action_probs, root = mcts.get_action_prob(env, temp=temp, training=True)
+        
+        # Store state
+        board = env.board.get_state()
+        player = env.current_player
+        encoded_state = encoder.encode(board, player)
+        
+        states.append(encoded_state)
+        players.append(player)
+        policies.append(action_probs)
+        
+        # Select action
+        legal_moves = env.get_legal_moves()
+        
+        if temp == 0:
+            action_id = int(np.argmax(action_probs))
+        else:
+            action_id = int(np.random.choice(len(action_probs), p=action_probs))
+        
+        # Convert to move
+        move = None
+        move_pair = action_manager.get_move_from_id(action_id)
+        for m in legal_moves:
+            if action_manager._extract_start_landing(m) == move_pair:
+                move = m
+                break
+        
+        if move is None:
+            move = legal_moves[0]
+        
+        env.step(move)
+    
+    # Get winner
+    _, winner = env._check_game_over()
+    
+    return {
+        'states': states,
+        'players': players,
+        'policies': policies,
+        'winner': winner
+    }

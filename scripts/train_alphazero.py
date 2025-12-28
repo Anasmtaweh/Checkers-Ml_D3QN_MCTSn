@@ -77,7 +77,7 @@ BATCH_SIZE = ACTIVE_CONFIG['BATCH_SIZE']
 BUFFER_SIZE = ACTIVE_CONFIG['BUFFER_SIZE']
 
 # Loss Weights
-VALUE_LOSS_WEIGHT = 1.0        # Weight for value loss
+VALUE_LOSS_WEIGHT = 0.5        # Weight for value loss
 POLICY_LOSS_WEIGHT = 1.0       # Weight for policy loss
 
 # Logging and Checkpointing
@@ -93,7 +93,7 @@ os.makedirs(os.path.dirname(CSV_LOG_FILE), exist_ok=True)
 # Resume Configuration
 # Set to iteration number to resume from checkpoint, or None to start fresh
 # Example: 10 will load checkpoint_iter_10.pth and continue from iteration 11
-RESUME_FROM_ITERATION: Optional[int] = 5
+RESUME_FROM_ITERATION: Optional[int] = None
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -251,7 +251,9 @@ def main():
         encoder=encoder,
         c_puct=MCTS_C_PUCT,
         num_simulations=MCTS_SIMULATIONS,
-        device=device
+        device=device,
+        dirichlet_alpha=0.6,
+        dirichlet_epsilon=0.25
     )
     print(f"  ✓ MCTS (simulations={MCTS_SIMULATIONS}, c_puct={MCTS_C_PUCT})")
     
@@ -486,6 +488,9 @@ def main():
 # ════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
+    import multiprocessing as mp
+    mp.set_start_method('spawn', force=True)
+    
     print("\nStarting AlphaZero Checkers Training...")
     print("Press Ctrl+C to interrupt training\n")
     
@@ -501,3 +506,7 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         sys.exit(1)
+    finally:
+        import ray
+        if ray.is_initialized():
+            ray.shutdown()
