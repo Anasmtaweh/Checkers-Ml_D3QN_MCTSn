@@ -27,9 +27,9 @@ CONFIGS = {
     # Standard training (overnight)
     'standard': {
         'NUM_ITERATIONS': 100,
-        'GAMES_PER_ITERATION': 20,
+        'GAMES_PER_ITERATION': 12,
         'TRAIN_EPOCHS': 10,
-        'MCTS_SIMULATIONS': 400,
+        'MCTS_SIMULATIONS': 800,
         'BATCH_SIZE': 256,
         'BUFFER_SIZE': 10000,
         'description': 'Standard training configuration (8-12 hours)'

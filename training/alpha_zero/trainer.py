@@ -171,6 +171,17 @@ class AlphaZeroTrainer:
                 if move_count > 120:
                     break
                 
+                # ADAPTIVE EXPLORATION: Reduce after network learns
+                if move_count <= temp_threshold:
+                    # Early game: High exploration (network still random)
+                    current_alpha = 0.8
+                else:
+                    # Late game: Lower exploration (network has learned)
+                    current_alpha = 0.4
+                
+                # Update MCTS exploration for this move
+                mcts.dirichlet_alpha = current_alpha
+                
                 temp = 1.0 if move_count <= temp_threshold else 0.0
                 action_probs, root = mcts.get_action_prob(env, temp=temp, training=True)
                 
@@ -183,7 +194,7 @@ class AlphaZeroTrainer:
                 policies.append(action_probs)
                 
                 # NEW: Store MCTS root value (what MCTS thinks about this position)
-                root_value = root.get_value()
+                root_value = root.get_greedy_value()
                 mcts_values.append(root_value)
                 
                 legal_moves = env.get_legal_moves()

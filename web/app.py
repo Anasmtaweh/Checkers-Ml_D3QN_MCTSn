@@ -76,7 +76,8 @@ def load_available_models():
         os.path.join(root_dir, "checkpoints_iron_league_v3"),
         os.path.join(project_root, "checkpoints"),
         os.path.join(root_dir, "gen12_elite_3500"),
-        os.path.join(root_dir, "agents", "d3qn")
+        os.path.join(root_dir, "agents", "d3qn"),
+        os.path.join(root_dir, "checkpoints", "alphazero")
     ]
     model_files = {}
     for p in paths:

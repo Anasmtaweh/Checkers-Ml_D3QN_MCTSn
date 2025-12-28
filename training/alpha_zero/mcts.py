@@ -52,6 +52,25 @@ class AlphaNode:
             return 0.0
         return self.value_sum / self.visits
     
+    def get_greedy_value(self):
+        """
+        Get the value by following greedy policy (most-visited child).
+        This removes exploration bias - we follow what MCTS thinks is best,
+        not the average of what it explored.
+        """
+        # If no children or too few visits, use average value
+        if not self.children or self.visits < 10:
+            return self.get_value()
+        
+        # Find child with highest visit count (this is what MCTS prefers)
+        best_child = max(
+            self.children.values(), 
+            key=lambda child: child.visits
+        )
+        
+        # Return that child's value (greedy choice)
+        return best_child.get_value()
+    
     @property
     def q_value(self) -> float:
         """
