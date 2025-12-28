@@ -42,6 +42,16 @@ class AlphaNode:
         self.parent: Optional['AlphaNode'] = parent
         self.action_taken: int = action_taken
     
+    def get_value(self):
+        """
+        Get the average Q-value of this node.
+        This represents the expected game outcome from this state
+        according to MCTS (not actual game outcome).
+        """
+        if self.visits == 0:
+            return 0.0
+        return self.value_sum / self.visits
+    
     @property
     def q_value(self) -> float:
         """

@@ -163,6 +163,7 @@ class AlphaZeroTrainer:
             env.reset()
             
             states, players, policies = [], [], []
+            mcts_values = []  # NEW: Store MCTS root values
             move_count = 0
             
             while not env.done:
@@ -180,6 +181,10 @@ class AlphaZeroTrainer:
                 states.append(encoded_state)
                 players.append(player)
                 policies.append(action_probs)
+                
+                # NEW: Store MCTS root value (what MCTS thinks about this position)
+                root_value = root.get_value()
+                mcts_values.append(root_value)
                 
                 legal_moves = env.get_legal_moves()
                 if temp == 0:
@@ -205,6 +210,7 @@ class AlphaZeroTrainer:
                 'states': states,
                 'players': players,
                 'policies': policies,
+                'mcts_values': mcts_values,  # NEW: Include MCTS values
                 'winner': winner
             }
         
@@ -352,45 +358,25 @@ class AlphaZeroTrainer:
             'winner': winner,
         }
     
-    def _process_game_data(self, game_data: Dict[str, Any]):
+    def _process_game_data(self, game_data: Dict) -> None:
         """
         Process game data and add to replay buffer.
-        
-        CRITICAL VALUE TARGET CALCULATION:
-        - For each position, assign value based on game outcome
-        - Value is from the perspective of the player to move
-        - If current_player == winner: Z = +1
-        - If current_player == -winner: Z = -1
-        - If draw: Z = 0
-        
-        Args:
-            game_data: Dictionary with states, players, policies, winner
         """
         states = game_data['states']
         players = game_data['players']
         policies = game_data['policies']
+        mcts_values = game_data['mcts_values']  # NEW
         winner = game_data['winner']
         
-        # Process each position in the game
-        for state, player, policy in zip(states, players, policies):
-            # Calculate value target based on game outcome
-            if winner == 0:
-                # Draw
-                value_target = 0.0
-            elif player == winner:
-                # This player won
-                value_target = 1.0
-            else:
-                # This player lost
-                value_target = -1.0
+        for i in range(len(states)):
+            # FIX: Use MCTS root value instead of game outcome
+            # This removes exploration bias from training targets
+            mcts_value = mcts_values[i]
             
-            # Add to replay buffer
-            # Store as tuple: (state_tensor, policy_array, value_scalar)
-            self.replay_buffer.append((
-                state.cpu(),  # Store on CPU to save GPU memory
-                policy,
-                value_target
-            ))
+            # Flip value for Player 2 (Player 1's value is positive)
+            z = mcts_value if players[i] == 1 else -mcts_value
+            
+            self.replay_buffer.append((states[i].cpu(), policies[i], z))
     
     def _get_move_from_action_id(self, action_id: int, legal_moves: List) -> Optional[Any]:
         """Convert action_id to actual move from legal_moves list."""
