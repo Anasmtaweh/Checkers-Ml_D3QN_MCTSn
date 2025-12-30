@@ -42,7 +42,7 @@ class CheckersBoardEncoder:
                 Channel 4: Tempo/identity plane (0.0 for P1, 1.0 for P2)
         """
         # Canonicalize: Make the network always see itself as Player 1
-        canonical_board = self._canonicalize_board(board, player)
+        canonical_board = self.canonicalize_board(board, player)
         
         # Create 5 feature planes
         planes = np.zeros((5, 8, 8), dtype=np.float32)
@@ -67,7 +67,7 @@ class CheckersBoardEncoder:
         
         return torch.from_numpy(planes)
     
-    def _canonicalize_board(self, board: np.ndarray, player: int) -> np.ndarray:
+    def canonicalize_board(self, board: np.ndarray, player: int) -> np.ndarray:
         """
         Transform board so the current player is always represented as Player 1.
         
@@ -85,8 +85,8 @@ class CheckersBoardEncoder:
         if player == 1:
             # Already viewing as Player 1, no transformation needed
             return board.copy()
-        else:
-            # Player is -1, need to flip perspective
+        elif player == -1:
+            # Player is 2, need to flip perspective
             # Step 1: Rotate 180 degrees (flip both vertically and horizontally)
             rotated = np.rot90(board, k=2)
             
@@ -95,6 +95,9 @@ class CheckersBoardEncoder:
             canonicalized = -rotated
             
             return canonicalized
+        else:
+            # Fallback for unexpected values (though Gen 1 uses 1/-1)
+            raise ValueError(f"Invalid player value: {player}. Expected 1 or -1.")
     
     def decode(
         self, 
@@ -140,7 +143,7 @@ class CheckersBoardEncoder:
         self, 
         boards: List[np.ndarray], 
         players: List[int],
-        infos: Optional[List[Dict[str, Any]]] = None
+        infos: Optional[List[Optional[Dict[str, Any]]]] = None  # FIXED TYPE HINT
     ) -> torch.Tensor:
         """
         Encode multiple boards into a batched tensor.
@@ -153,13 +156,18 @@ class CheckersBoardEncoder:
         Returns:
             Tensor of shape (Batch, 5, 8, 8)
         """
-        if infos is None:
-            infos = [None] * len(boards)  # type: ignore
+        # Create a new variable to hold the safe list to satisfy type checker
+        safe_infos: List[Optional[Dict[str, Any]]]
         
-        assert infos is not None
+        if infos is None:
+            # This creates List[None], which is compatible with List[Optional[Dict]]
+            safe_infos = [None] * len(boards)
+        else:
+            safe_infos = infos
+        
         encoded_list = [
             self.encode(board, player, info)
-            for board, player, info in zip(boards, players, infos)
+            for board, player, info in zip(boards, players, safe_infos)
         ]
         
         return torch.stack(encoded_list, dim=0)

@@ -29,6 +29,33 @@ class CheckersRules:
         return moves
 
     @staticmethod
+    def _capture_steps_from(board, r, c, player):
+        """
+        Return all immediate capture steps from position (r, c).
+        Returns list of single steps: ((r_start, c_start), (r_land, c_land), (r_jumped, c_jumped))
+        """
+        steps = []
+
+        if not (0 <= r < 8 and 0 <= c < 8):
+            return steps
+        if not (board[r, c] == player or board[r, c] == 2 * player):
+            return steps
+
+        for dr in CheckersRules._piece_directions(board, r, c):
+            for dc in (-1, 1):
+                mid_r, mid_c = r + dr, c + dc
+                land_r, land_c = r + 2 * dr, c + 2 * dc
+
+                if not (0 <= mid_r < 8 and 0 <= mid_c < 8 and 0 <= land_r < 8 and 0 <= land_c < 8):
+                    continue
+
+                if CheckersRules._is_opponent(board[mid_r, mid_c], player) and board[land_r, land_c] == 0:
+                    steps.append(((r, c), (land_r, land_c), (mid_r, mid_c)))
+
+        return steps
+
+
+    @staticmethod
     def _capture_sequences_from(board, r, c, player):
         """
         Depth-first search for all capture chains starting from (r, c).
@@ -62,6 +89,27 @@ class CheckersRules:
         return sequences
 
     @staticmethod
+    def capture_steps(board, player, forced_from=None):
+        """
+        Return all immediate capture steps for player.
+        Each step is a single tuple: ((r_start, c_start), (r_land, c_land), (r_jumped, c_jumped))
+        If forced_from is provided, restrict captures to that piece only.
+        """
+        steps = []
+        positions = []
+        if forced_from is not None:
+            positions = [forced_from]
+        else:
+            for r in range(8):
+                for c in range(8):
+                    if board[r, c] == player or board[r, c] == 2 * player:
+                        positions.append((r, c))
+
+        for r, c in positions:
+            steps.extend(CheckersRules._capture_steps_from(board, r, c, player))
+        return steps
+
+    @staticmethod
     def capture_sequences(board, player, start_pos=None):
         """
         Return all capture sequences for player.
@@ -85,10 +133,12 @@ class CheckersRules:
     @staticmethod
     def get_legal_moves(board, player, forced_from=None):
         """
-        Return mandatory captures if any (as sequences), otherwise simple moves.
+        Return mandatory captures if any (as single steps), otherwise simple moves.
         forced_from restricts capture search to a single piece for chain moves.
+        Returns list of single capture steps: ((r_start, c_start), (r_land, c_land), (r_jumped, c_jumped))
+        or simple moves: ((r_start, c_start), (r_land, c_land))
         """
-        captures = CheckersRules.capture_sequences(board, player, forced_from)
+        captures = CheckersRules.capture_steps(board, player, forced_from)
         if captures:
             return captures
         return CheckersRules.simple_moves(board, player)

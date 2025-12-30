@@ -128,8 +128,8 @@ class AlphaZeroNet(nn.Module):
         if x.dim() == 3:
             x = x.unsqueeze(0)  # Add batch dimension: (5, 8, 8) -> (1, 5, 8, 8)
         
-        # Ensure tensor is on correct device
-        x = x.to(self.device)
+        # Ensure tensor is on correct device and float type (crucial for CNN)
+        x = x.to(self.device).float()
         
         # ================================================================
         # CNN BACKBONE - Feature Extraction
@@ -188,10 +188,7 @@ class AlphaZeroNet(nn.Module):
         """
         self.eval()  # Set to evaluation mode
         with torch.no_grad():
-            # Handle batch dimension
-            if state.dim() == 3:
-                state = state.unsqueeze(0)
-            
+            # Forward handles dimension checking and device placement
             policy_logits, value = self.forward(state)
             
             # Convert log-probabilities to probabilities

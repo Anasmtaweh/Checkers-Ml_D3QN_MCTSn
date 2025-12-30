@@ -1,12 +1,14 @@
 import os
 import sys
+import copy
+import threading
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from flask import Flask, render_template, jsonify, request
 
-# Add parent directory to path so we can import your existing modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core.game import CheckersEnv
@@ -14,24 +16,24 @@ from core.action_manager import ActionManager
 from core.board_encoder import CheckersBoardEncoder
 from core.move_parser import parse_legal_moves
 from training.d3qn.model import D3QNModel
+from training.alpha_zero.network import AlphaZeroModel
+from training.alpha_zero.mcts import MCTS
 
-# Fix for TemplateNotFound: Explicitly define paths relative to this script
 base_dir = os.path.dirname(os.path.abspath(__file__))
-template_dir = base_dir
-static_dir = base_dir
+app = Flask(__name__, template_folder=base_dir, static_folder=base_dir)
 
-app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Web App running on: {device}")
 
-# --- GLOBAL GAME STATE ---
-device = "cpu"  # CPU is fast enough for inference and safer for web servers
 env = CheckersEnv()
 models = {}
 action_manager = ActionManager(device=device)
 encoder = CheckersBoardEncoder()
 agents_config = {"p1": "human", "p2": "human"}
+game_lock = threading.Lock()
+WEB_MCTS_SIMS = 400 
 
 class LegacyDuelingDQN(nn.Module):
-    """Fallback for older single-head models."""
     def __init__(self, action_dim, device):
         super(LegacyDuelingDQN, self).__init__()
         self.device = device
@@ -45,7 +47,6 @@ class LegacyDuelingDQN(nn.Module):
         self.advantage_fc1 = nn.Linear(self.flatten_size, 512)
         self.advantage_fc2 = nn.Linear(512, action_dim)
         self.to(device)
-
     def forward(self, x):
         if x.dim() == 3: x = x.unsqueeze(0)
         x = x.to(self.device)
@@ -57,260 +58,172 @@ class LegacyDuelingDQN(nn.Module):
         val = self.value_fc2(F.relu(self.value_fc1(x)))
         adv = self.advantage_fc2(F.relu(self.advantage_fc1(x)))
         return val + (adv - adv.mean(dim=1, keepdim=True))
+    def get_q_values(self, state, player_side=1): return self.forward(state)
 
-    def get_q_values(self, state, player_side=1):
-        return self.forward(state)
-
-# --- MODEL LOADER ---
 def load_available_models():
-    """Scans folders for .pth files"""
-    # Resolve root directory (one level up from web_interface)
     root_dir = os.path.abspath(os.path.join(base_dir, '..'))
-    project_root = os.path.abspath(os.path.join(root_dir, '..'))
-
-    paths = [
-        os.path.join(root_dir, "opponent_pool"),
-        os.path.join(project_root, "opponent_pool"),
-        os.path.join(root_dir, "checkpoints_gen11_decisive"),
-        os.path.join(root_dir, "checkpoints_gen12_elite"),
-        os.path.join(root_dir, "checkpoints_iron_league_v3"),
-        os.path.join(project_root, "checkpoints"),
-        os.path.join(root_dir, "gen12_elite_3500"),
-        os.path.join(root_dir, "agents", "d3qn"),
-        os.path.join(root_dir, "checkpoints", "alphazero")
-    ]
+    paths = [os.path.join(root_dir, "checkpoints", "alphazero"), os.path.join(root_dir, "agents", "d3qn")]
     model_files = {}
     for p in paths:
         if os.path.exists(p):
             for f in os.listdir(p):
-                if f.endswith(".pth"):
-                    name = f.replace(".pth", "")
-                    full_path = os.path.join(p, f)
-                    model_files[name] = full_path
+                if f.endswith(".pth"): model_files[f.replace(".pth", "")] = os.path.join(p, f)
     return model_files
 
 def load_agent(name, path):
-    """Loads a D3QN agent from disk"""
-    global action_manager
-    if action_manager is None:
-        action_manager = ActionManager(device=device)
-
+    print(f"Loading agent: {name}")
     try:
-        model = D3QNModel(action_manager.action_dim, device)
         checkpoint = torch.load(path, map_location=device)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            model = AlphaZeroModel(action_dim=action_manager.action_dim, device=device)
+            model.network.load_state_dict(checkpoint['model_state_dict'])
+            model.eval()
+            return model
         
-        state_dict = None
-        if isinstance(checkpoint, dict):
-            if 'model_online' in checkpoint: state_dict = checkpoint['model_online']
-            elif 'online' in checkpoint: state_dict = checkpoint['online']
-            elif 'online_model_state_dict' in checkpoint: state_dict = checkpoint['online_model_state_dict']
-            else: state_dict = checkpoint
-        else:
-            state_dict = checkpoint
-
+        state_dict = checkpoint.get('model_online', checkpoint) if isinstance(checkpoint, dict) else checkpoint
         try:
+            model = D3QNModel(action_manager.action_dim, device)
             model.online.load_state_dict(state_dict)
-        except RuntimeError:
-            # Fallback to Legacy
-            print(f"⚠️  Legacy model detected: {name}")
+            model.eval()
+            return model
+        except:
             model = LegacyDuelingDQN(action_manager.action_dim, device).to(device)
             model.load_state_dict(state_dict)
-        
-        model.eval()
-        return model
+            model.eval()
+            return model
     except Exception as e:
-        print(f"Error loading {name}: {e}")
+        print(f"Error: {e}")
         return None
 
-
-# --- ROUTES ---
-
-@app.route('/')
-def index():
-    available_agents = load_available_models()
-    return render_template('index.html', agents=available_agents.keys())
-
-@app.route('/start_game', methods=['POST'])
-def start_game():
-    global env, agents_config, models
-    data = request.json
-    
-    agents_config['p1'] = data.get('p1', 'human')
-    agents_config['p2'] = data.get('p2', 'human')
-    
-    # Reload environment
-    env = CheckersEnv()
-    state = env.reset()
-    
-    # Load requested models
-    model_paths = load_available_models()
-    models = {}
-    
-    for p in ['p1', 'p2']:
-        name = agents_config[p]
-        if name != 'human' and name != 'random':
-            if name in model_paths:
-                models[name] = load_agent(name, model_paths[name])
-    
-    return jsonify(get_board_state())
-
-@app.route('/get_move', methods=['POST'])
-def get_move():
-    """Calculates a move for an AI agent"""
-    global env
-    
-    current_player = env.current_player # 1 or -1
-    agent_name = agents_config['p1'] if current_player == 1 else agents_config['p2']
-    
-    if agent_name == 'human':
-        return jsonify({"error": "Waiting for human move"})
-        
-    legal_moves = env.get_legal_moves()
-    if not legal_moves:
-        return jsonify({"game_over": True, "winner": 0}) # Stalemate/Loss
-    
-    selected_move = None
-    
-    # AI LOGIC
-    if agent_name == 'random':
-        import random
-        selected_move = random.choice(legal_moves)
-    else:
-        # Neural Network Move
-        model = models.get(agent_name)
-        if model:
-            state_tensor = encoder.encode(env.board.get_state(), current_player).unsqueeze(0).to(device)
-            with torch.no_grad():
-                if hasattr(model, 'online'):
-                    # Pass player_side if model supports it (Gen 12)
-                    try:
-                        q_values = model.online(state_tensor, player_side=1 if current_player == 1 else -1)
-                    except TypeError:
-                        q_values = model.online(state_tensor)
-                else:
-                    try:
-                        q_values = model(state_tensor, player_side=1 if current_player == 1 else -1)
-                    except TypeError:
-                        q_values = model(state_tensor)
-            
-            # --- FIX FOR P2 PERSPECTIVE ---
-            if current_player == -1:
-                # 1. Flip legal moves to Canonical (P1) perspective
-                normalized_moves, mapping = parse_legal_moves(legal_moves, action_manager)
-                
-                canonical_moves = [action_manager.flip_move(m) for m in normalized_moves]
-                mask = action_manager.make_legal_action_mask(canonical_moves).to(device)
-                
-                # Map Canonical ID -> Absolute ID
-                canonical_to_absolute = {}
-                for i, cm in enumerate(canonical_moves):
-                    cid = action_manager.get_action_id(cm)
-                    if cid >= 0:
-                        orig_move = normalized_moves[i]
-                        aid = action_manager.get_action_id(orig_move)
-                        canonical_to_absolute[cid] = aid
-            else:
-                # P1: Canonical = Absolute
-                mask = action_manager.make_legal_action_mask(legal_moves).to(device)
-                canonical_to_absolute = None
-            
-            # Mask illegal moves
-            q_values[0, ~mask] = -float('inf')
-            action_id = int(q_values.argmax().item())
-            
-            # If P2, action_id is Canonical. We need to map it back to Absolute.
-            if current_player == -1 and canonical_to_absolute is not None:
-                action_id = canonical_to_absolute.get(action_id, -1)
-            
-            # Translate ID back to Move
-            move_struct = action_manager.get_move_from_id(action_id)
-            
-            # Match strict format
-            for lm in legal_moves:
-                if isinstance(lm, list):
-                     if (tuple(lm[0][0]), tuple(lm[-1][1])) == move_struct: selected_move = lm; break
-                elif len(lm) == 2:
-                     if (tuple(lm[0]), tuple(lm[1])) == move_struct: selected_move = lm; break
-            
-            if not selected_move: selected_move = legal_moves[0] # Fallback
-        else:
-            # Fallback if model failed to load
-            import random
-            selected_move = random.choice(legal_moves)
-            
-    # Apply Move
-    state, reward, done, info = env.step(selected_move)
-    return jsonify(get_board_state())
-
-@app.route('/human_move', methods=['POST'])
-def human_move():
-    """Processes a human click"""
-    data = request.json
-    move = data.get('move') # Format: [[r1,c1], [r2,c2]]
-    
-    # Convert list of lists to list of tuples
-    if isinstance(move[0], list):
-        # Check if legal
-        legal = env.get_legal_moves()
-        
-        valid = False
-        final_move = None
-        
-        # Convert JS coordinates to Python Tuples for comparison
-        move_start = tuple(move[0])
-        move_end = tuple(move[-1])
-        
-        for lm in legal:
-            # Handle standard moves and multi-jumps
-            if isinstance(lm, list):
-                lm_start = lm[0][0]
-                lm_end = lm[-1][1]
-            else:
-                lm_start = lm[0]
-                lm_end = lm[1]
-            
-            if lm_start == move_start and lm_end == move_end:
-                final_move = lm
-                valid = True
-                break
-        
-        if valid:
-            env.step(final_move)
-            return jsonify(get_board_state())
-            
-    return jsonify({"error": "Illegal Move"}), 400
-
 def get_board_state():
-    board = env.board.board.tolist() # 8x8 grid
-    legal_moves = env.get_legal_moves()
-    
-    # Dynamic Game Over Check
-    is_game_over = len(legal_moves) == 0
-    winner = 0
-    
-    if is_game_over:
-        winner = -1 if env.current_player == 1 else 1
-
     return {
-        "board": board,
+        "board": env.board.board.tolist(),
         "current_player": env.current_player,
-        "legal_moves": serialize_moves(legal_moves),
-        "game_over": is_game_over,
-        "winner": winner
+        "legal_moves": serialize_moves(env.get_legal_moves()),
+        "game_over": len(env.get_legal_moves()) == 0,
+        "winner": -env.current_player if len(env.get_legal_moves()) == 0 else 0
     }
 
 def serialize_moves(moves):
-    """Converts move tuples to list format for JSON"""
-    serialized = []
-    for m in moves:
-        if isinstance(m, list): # Multi-jump: [((r,c), (r,c)), ...]
-            # We just send start and end for UI simplicity
-            start = m[0][0]
-            end = m[-1][1]
-            serialized.append([start, end])
-        else: # Regular: ((r,c), (r,c))
-            serialized.append([m[0], m[1]])
-    return serialized
+    return [[m[0][0], m[-1][1]] if isinstance(m, list) else [m[0], m[1]] for m in moves]
+
+@app.route('/')
+def index(): return render_template('index.html', agents=list(load_available_models().keys()))
+
+@app.route('/start_game', methods=['POST'])
+def start_game():
+    with game_lock:
+        data = request.json
+        agents_config['p1'] = data.get('p1', 'human')
+        agents_config['p2'] = data.get('p2', 'human')
+        env.reset()
+        models.clear()
+        paths = load_available_models()
+        for p in ['p1', 'p2']:
+            name = agents_config[p]
+            if name != 'human' and name in paths: models[name] = load_agent(name, paths[name])
+        return jsonify(get_board_state())
+
+@app.route('/get_move', methods=['POST'])
+def get_move():
+    with game_lock:
+        if not env.get_legal_moves(): return jsonify(get_board_state())
+        
+        cp = env.current_player
+        name = agents_config['p1'] if cp == 1 else agents_config['p2']
+        if name == 'human': return jsonify({"error": "Waiting"})
+        
+        legal = env.get_legal_moves()
+        model = models.get(name)
+        selected = None
+        move_struct = None
+        
+        if model:
+            if isinstance(model, AlphaZeroModel):
+                mcts = MCTS(model, action_manager, encoder, c_puct=1.5, num_simulations=WEB_MCTS_SIMS, device=device, dirichlet_alpha=0.0)
+                
+                # --- FIX: Create a VIEW of the environment for the AI ---
+                # The AI (AlphaZero) is trained to always play as "Player 1" (moving Up).
+                # If the current player is "Player -1" (Black), we must present the board 
+                # as if they are Red. MCTS usually handles logic, but let's ensure 
+                # legal moves are correctly masked.
+                
+                # We pass the real env. The MCTS class *should* handle the flipping internally 
+                # if implemented correctly with the encoder. 
+                # BUT, since we are seeing errors, we will force the flip logic here.
+                
+                sim_env = copy.deepcopy(env)
+                
+                # Run MCTS
+                probs, root_node = mcts.get_action_prob(sim_env, temp=0.25, training=False)
+                
+                # --- DEBUG LOGS ---
+                print(f"\n[DEBUG] AI Thinking (Player {cp})...")
+                print(f"  Root Value (My Winning Chance): {root_node.get_greedy_value():.4f}")
+                
+                # ... (Debug printing logic) ...
+                
+                aid = int(np.argmax(probs))
+                move_struct = action_manager.get_move_from_id(aid)
+                
+                # CRITICAL FIX: If we are Player -1, the AI output a "Canonical" move (Red perspective).
+                # We must FLIP it back to Real World coordinates to execute it.
+                if cp == -1: 
+                    move_struct = action_manager.flip_move(move_struct)
+            else:
+                # D3QN Logic (Keep existing)
+                state = encoder.encode(env.board.get_state(), cp).unsqueeze(0).to(device)
+                with torch.no_grad():
+                    q = model.online(state) if hasattr(model, 'online') else model(state)
+                
+                if cp == -1:
+                    norm, _ = parse_legal_moves(legal, action_manager)
+                    can = [action_manager.flip_move(m) for m in norm]
+                    mask = action_manager.make_legal_action_mask(can).to(device)
+                    can_to_abs = {action_manager.get_action_id(c): action_manager.get_action_id(n) for c, n in zip(can, norm)}
+                else:
+                    mask = action_manager.make_legal_action_mask(legal).to(device)
+                    can_to_abs = None
+
+                q[0, ~mask] = -float('inf')
+                probs = F.softmax(q/0.1, dim=1)
+                aid = int(torch.multinomial(probs, 1).item())
+                
+                if cp == -1 and can_to_abs: aid = can_to_abs.get(aid, -1)
+                move_struct = action_manager.get_move_from_id(aid)
+
+            for m in legal:
+                start, end = (m[0][0], m[0][1]) if isinstance(m, list) else (m[0], m[1])
+                if (tuple(start), tuple(end)) == move_struct:
+                    selected = m
+                    break
+        else:
+            import random
+            selected = random.choice(legal)
+        
+        if not selected: 
+            print(f"⚠️ Warning: Move {move_struct} illegal. Picking random fallback.")
+            selected = legal[0]
+            
+        env.step(selected)
+        print(f"Executed: {selected}")
+        time.sleep(1.0)
+        return jsonify(get_board_state())
+
+@app.route('/human_move', methods=['POST'])
+def human_move():
+    with game_lock:
+        move_data = request.json.get('move')
+        if not move_data: return jsonify({"error": "No move"}), 400
+        start, end = tuple(move_data[0]), tuple(move_data[-1])
+        
+        for m in env.get_legal_moves():
+            m_start = m[0][0] if isinstance(m, list) else m[0]
+            m_end = m[-1][1] if isinstance(m, list) else m[1]
+            if m_start == start and m_end == end:
+                env.step(m)
+                return jsonify(get_board_state())
+        return jsonify({"error": "Illegal"}), 400
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

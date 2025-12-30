@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkers AI with D3QN and MCTS - Documentation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2, h3, h4 {
+            color: #2c3e50;
+            margin-top: 1.5em;
+        }
+        h1 { border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        h2 { border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: Consolas, Monaco, "Andale Mono", monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border: 1px solid #e9ecef;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            border: none;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        ul, ol {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 5px;
+        }
+        .toc {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+        .toc ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .toc li {
+            margin-bottom: 5px;
+        }
+        .toc a {
+            text-decoration: none;
+            color: #0366d6;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Checkers AI with D3QN and MCTS</h1>
+
+<div class="toc">
+    <h3>Table of Contents</h3>
+    <ul>
+        <li><a href="#1-project-overview">1. Project Overview</a></li>
+        <li><a href="#2-architecture-documentation">2. Architecture Documentation</a></li>
+        <li><a href="#3-api-reference">3. API Reference</a></li>
+        <li><a href="#4-installation-setup">4. Installation & Setup</a></li>
+        <li><a href="#5-usage-guide">5. Usage Guide</a></li>
+        <li><a href="#6-training-documentation">6. Training Documentation</a></li>
+        <li><a href="#7-evaluation-benchmarking">7. Evaluation & Benchmarking</a></li>
+        <li><a href="#8-project-report-summary">8. Project Report Summary</a></li>
+        <li><a href="#9-references">9. References</a></li>
+    </ul>
+</div>
+
+<h2 id="1-project-overview">1. PROJECT OVERVIEW</h2>
+<p><strong>Project Name:</strong> Checkers AI with D3QN and MCTS</p>
+<p><strong>Description:</strong> Advanced checkers AI system combining Deep Dueling Double Q-Network (D3QN) with Monte Carlo Tree Search (MCTS) for competitive gameplay through self-play reinforcement learning.</p>
+
+<h2 id="2-architecture-documentation">2. ARCHITECTURE DOCUMENTATION</h2>
+
+<h3 id="2-1-system-architecture-overview">2.1 System Architecture Overview</h3>
+<p>The system consists of four main components:</p>
+<ul>
+    <li><strong>Game Engine (core/)</strong>
+        <ul>
+            <li>Board state management</li>
+            <li>Rules validation</li>
+            <li>Move generation and execution</li>
+            <li>Game state encoding</li>
+        </ul>
+    </li>
+    <li><strong>D3QN Neural Network (training/d3qn/)</strong>
+        <ul>
+            <li>Dual-head dueling architecture</li>
+            <li>Convolutional feature extraction</li>
+            <li>Separate value/advantage streams per player</li>
+            <li>Target network for stable training</li>
+        </ul>
+    </li>
+    <li><strong>MCTS Search (training/mcts/)</strong>
+        <ul>
+            <li>Neural network-guided tree search</li>
+            <li>UCB1 exploration strategy</li>
+            <li>Rollout simulation with heuristics</li>
+            <li>Move ordering optimization</li>
+        </ul>
+    </li>
+    <li><strong>Evaluation System (evaluation/)</strong>
+        <ul>
+            <li>Tournament management</li>
+            <li>Benchmarking tools</li>
+            <li>Performance metrics</li>
+        </ul>
+    </li>
+</ul>
+
+<h3 id="2-2-game-engine-architecture">2.2 Game Engine Architecture</h3>
+<h4>CheckersBoard (core/board.py)</h4>
+<ul>
+    <li>8x8 numpy array representation</li>
+    <li>Piece encoding: 1 (P1 man), 2 (P1 king), -1 (P2 man), -2 (P2 king)</li>
+    <li>Automatic king promotion at board edges</li>
+</ul>
+
+<h4>CheckersEnv (core/game.py)</h4>
+<ul>
+    <li>OpenAI Gym-style interface</li>
+    <li>Reward shaping: +1.0 (win), -1.0 (loss), +0.01 (multi-jump), +0.001 (capture)</li>
+    <li>Capture chain handling</li>
+    <li>Game termination detection</li>
+</ul>
+
+<h4>CheckersRules (core/rules.py)</h4>
+<ul>
+    <li>Legal move generation</li>
+    <li>Forced capture enforcement</li>
+    <li>Multi-jump sequence validation</li>
+</ul>
+
+<h3 id="2-3-d3qn-network-architecture">2.3 D3QN Network Architecture</h3>
+<p><strong>Input:</strong> 5-channel tensor (batch, 5, 8, 8)</p>
+<ul>
+    <li>Channel 0: My men</li>
+    <li>Channel 1: My kings</li>
+    <li>Channel 2: Enemy men</li>
+    <li>Channel 3: Enemy kings</li>
+    <li>Channel 4: Tempo (0.0 for P1, 1.0 for P2)</li>
+</ul>
+
+<p><strong>CNN Backbone:</strong></p>
+<pre><code>Conv2D(5→32, 3x3) → ReLU 
+Conv2D(32→64, 3x3) → ReLU 
+Conv2D(64→64, 3x3) → ReLU 
+Flatten(4096) → LayerNorm</code></pre>
+
+<p><strong>Dual-Head Architecture:</strong></p>
+<ul>
+    <li><strong>P1 Head:</strong> Value stream (256→128→1) + Advantage stream (256→128→170)</li>
+    <li><strong>P2 Head:</strong> Value stream (256→128→1) + Advantage stream (256→128→170)</li>
+    <li><strong>Output:</strong> Q-values for 170 possible actions</li>
+</ul>
+
+<p><strong>Key Features:</strong></p>
+<ul>
+    <li>Kaiming initialization for stability</li>
+    <li>Layer normalization</li>
+    <li>Q-value scaling (×0.1) to prevent explosion</li>
+    <li>Separate heads prevent player interference</li>
+</ul>
+
+<h3 id="2-4-mcts-architecture">2.4 MCTS Architecture</h3>
+<p><strong>Search Process:</strong></p>
+<ul>
+    <li><strong>Selection:</strong> UCB1 formula with exploration weight 2.0</li>
+    <li><strong>Expansion:</strong> Add child nodes for legal moves</li>
+    <li><strong>Simulation:</strong> Neural network evaluation or rollout</li>
+    <li><strong>Backpropagation:</strong> Update visit counts and values</li>
+</ul>
+
+<p><strong>Enhancements:</strong></p>
+<ul>
+    <li>Neural network position evaluation</li>
+    <li>Capture move prioritization</li>
+    <li>7-second time limit per move</li>
+    <li>50-ply rollout depth</li>
+</ul>
+
+<h2 id="3-api-reference">3. API REFERENCE</h2>
+
+<h3 id="3-1-core-api">3.1 Core API</h3>
+
+<h4>CheckersEnv</h4>
+<pre><code class="language-python">class CheckersEnv:
+    def reset() -> np.ndarray
+        """Reset game to initial state."""
+    
+    def step(action) -> Tuple[np.ndarray, float, bool, dict]
+        """Execute action, return (state, reward, done, info)."""
+    
+    def legal_moves() -> List[Move]
+        """Get all legal moves for current player."""
+    
+    def render() -> None
+        """Print board to console."""</code></pre>
+
+<h4>CheckersBoard</h4>
+<pre><code class="language-python">class CheckersBoard:
+    def reset() -> np.ndarray
+        """Initialize standard checkers starting position."""
+    
+    def get_state() -> np.ndarray
+        """Return copy of current board state."""
+    
+    def move_piece(r1, c1, r2, c2) -> None
+        """Move piece with automatic king promotion."""</code></pre>
+
+<h4>ActionManager</h4>
+<pre><code class="language-python">class ActionManager:
+    action_dim: int  # 170 total actions
+    
+    def get_action_id(move: Move) -> int
+        """Convert move to action index."""
+    
+    def get_move_from_id(action_id: int) -> Move
+        """Convert action index to move."""
+    
+    def make_legal_action_mask(legal_moves: List) -> torch.Tensor
+        """Create boolean mask for legal actions."""
+    
+    def flip_move(move: Move) -> Move
+        """Flip move 180° for P2 perspective."""</code></pre>
+
+<h4>CheckersBoardEncoder</h4>
+<pre><code class="language-python">class CheckersBoardEncoder:
+    def encode(board: np.ndarray, player: int) -> torch.Tensor
+        """Convert board to 5-channel tensor (5, 8, 8)."""
+    
+    def decode(encoded: torch.Tensor, player: int) -> np.ndarray
+        """Convert tensor back to board array."""
+    
+    def batch_encode(boards: List, players: List) -> torch.Tensor
+        """Encode multiple boards (batch, 5, 8, 8)."""</code></pre>
+
+<h3 id="3-2-training-api">3.2 Training API</h3>
+
+<h4>D3QNAgent</h4>
+<pre><code class="language-python">class D3QNAgent:
+    def __init__(device: str = "cpu")
+        """Initialize agent with D3QN model."""
+    
+    def load_weights(path: str) -> None
+        """Load pre-trained model checkpoint."""
+    
+    def select_action(board, player, legal_moves, epsilon: float = 0.0) 
+        -> Tuple[Move, int]
+        """Select action using epsilon-greedy policy."""</code></pre>
+
+<h4>D3QNModel</h4>
+<pre><code class="language-python">class D3QNModel:
+    online: DuelingDQN  # Training network
+    target: DuelingDQN  # Stable target network
+    
+    def get_q_values(state: torch.Tensor, player_side: int = 1, 
+                     use_target: bool = False) -> torch.Tensor
+        """Get Q-values for state."""
+    
+    def update_target_network() -> None
+        """Copy online weights to target network."""
+    
+    def save(path: str) -> None
+        """Save model checkpoint."""
+    
+    def load(path: str) -> None
+        """Load model checkpoint."""</code></pre>
+
+<h4>D3QNTrainer</h4>
+<pre><code class="language-python">class D3QNTrainer:
+    def train_step(batch_size: int, player_side: int = 1) -> float
+        """Single training step, returns loss."""
+    
+    def update_target_network() -> None
+        """Soft update target network (tau=0.001)."""</code></pre>
+
+<h4>ReplayBuffer</h4>
+<pre><code class="language-python">class ReplayBuffer:
+    def push(state, action, reward, next_state, done, next_legal_mask) -> None
+        """Add transition to buffer."""
+    
+    def sample(batch_size: int) -> Tuple
+        """Sample random batch for training."""
+    
+    def __len__() -> int
+        """Return current buffer size."""</code></pre>
+
+<h3 id="3-3-evaluation-api">3.3 Evaluation API</h3>
+
+<h4>MCTSAgent</h4>
+<pre><code class="language-python">class MCTSAgent:
+    def __init__(simulations: int = 1000, time_limit: float = None,
+                 exploration_weight: float = 1.414, eval_model = None)
+        """Initialize MCTS agent."""
+    
+    def get_action(state, verbose: bool = False) -> Move
+        """Select best move using MCTS."""</code></pre>
+
+<h4>Tournament</h4>
+<pre><code class="language-python">def run_tournament(agents: List, games_per_pair: int = 10) -> dict
+    """Run round-robin tournament, return results."""
+
+def run_benchmark(agent, opponent, num_games: int = 100) -> dict
+    """Benchmark agent against opponent."""</code></pre>
+
+<h2 id="4-installation-setup">4. INSTALLATION & SETUP</h2>
+
+<h3 id="4-1-requirements">4.1 Requirements</h3>
+<ul>
+    <li>Python 3.8+</li>
+    <li>PyTorch 1.10+</li>
+    <li>NumPy 1.21+</li>
+    <li>Flask (for web interface)</li>
+</ul>
+
+<h3 id="4-2-installation">4.2 Installation</h3>
+<pre><code class="language-bash"># Clone repository
+git clone https://github.com/Anasmtaweh/Checkers-Ml_D3QN_MCTSn.git
+cd Checkers-Ml_D3QN_MCTSn
+
+# Install dependencies
+pip install torch numpy flask
+
+# Verify installation
+python -c "import torch; print(torch.__version__)"</code></pre>
+
+<h3 id="4-3-directory-structure">4.3 Directory Structure</h3>
+<pre><code>Checkers-Ml_D3QN_MCTSn/
+├── agents/                 # Pre-trained models
+│   └── d3qn/
+│       ├── gen8_titan_LEGACY.pth
+│       ├── gen11_ep500_80vR_75vT_CHAMPION.pth
+│       └── gen12_elite_3500.pth
+├── core/                   # Game engine
+│   ├── game.py
+│   ├── board.py
+│   ├── rules.py
+│   ├── action_manager.py
+│   ├── board_encoder.py
+│   └── move_parser.py
+├── training/               # Training code
+│   ├── d3qn/
+│   │   ├── model.py
+│   │   ├── agent.py
+│   │   ├── trainer.py
+│   │   ├── buffer.py
+│   │   └── self_play.py
+│   └── mcts/
+│       ├── mcts_node.py
+│       └── mcts_agent.py
+├── evaluation/             # Evaluation tools
+│   ├── tournament.py
+│   ├── benchmark.py
+│   └── play_vs_mcts.py
+├── scripts/                # Entry points
+│   ├── train_d3qn.py
+│   └── iron_tournament.py
+├── web/                    # Web interface
+│   ├── app.py
+│   ├── index.html
+│   └── game.js
+└── data/                   # Training logs
+    └── training_logs/</code></pre>
+
+<h2 id="5-usage-guide">5. USAGE GUIDE</h2>
+
+<h3 id="5-1-quick-start">5.1 Quick Start</h3>
+<p><strong>Play Against MCTS:</strong></p>
+<pre><code class="language-bash">python evaluation/play_vs_mcts.py</code></pre>
+
+<p><strong>Run Tournament:</strong></p>
+<pre><code class="language-bash">python evaluation/tournament.py</code></pre>
+
+<p><strong>Train New Agent:</strong></p>
+<pre><code class="language-bash">python scripts/train_d3qn.py --episodes 1000 --checkpoint-freq 100</code></pre>
+
+<h3 id="5-2-training-a-d3qn-agent">5.2 Training a D3QN Agent</h3>
+<p><strong>Basic Training:</strong></p>
+<pre><code class="language-python">from core.game import CheckersEnv
+from training.d3qn.agent import D3QNAgent
+from training.d3qn.trainer import D3QNTrainer
+from training.d3qn.buffer import ReplayBuffer
+
+# Initialize environment
+env = CheckersEnv()
+
+# Create agent
+agent = D3QNAgent(device="cuda")
+
+# Create replay buffer
+buffer = ReplayBuffer(capacity=100000)
+
+# Training loop
+for episode in range(1000):
+    state = env.reset()
+    done = False
+    
+    while not done:
+        # Select action
+        legal_moves = env.legal_moves()
+        action, action_id = agent.select_action(
+            state, env.current_player, legal_moves, epsilon=0.1
+        )
+        
+        # Execute action
+        next_state, reward, done, info = env.step(action)
+        
+        # Store transition
+        buffer.push(state, action_id, reward, next_state, done, next_legal_mask)
+        
+        # Train
+        if len(buffer) > 1000:
+            loss = trainer.train_step(batch_size=32, player_side=env.current_player)
+        
+        state = next_state</code></pre>
+
+<p><strong>Command-Line Training:</strong></p>
+<pre><code class="language-bash">python scripts/train_d3qn.py \
+    --episodes 5000 \
+    --batch-size 64 \
+    --learning-rate 0.0001 \
+    --gamma 0.99 \
+    --epsilon-start 1.0 \
+    --epsilon-end 0.01 \
+    --epsilon-decay 0.995 \
+    --checkpoint-freq 100 \
+    --device cuda</code></pre>
+
+<h3 id="5-3-evaluating-models">5.3 Evaluating Models</h3>
+<p><strong>Benchmark Against Random:</strong></p>
+<pre><code class="language-python">from evaluation.benchmark import run_benchmark
+from training.d3qn.agent import D3QNAgent
+from training.d3qn.random_agent import RandomAgent
+
+agent = D3QNAgent()
+agent.load_weights("agents/d3qn/gen11_CHAMPION.pth")
+
+random_agent = RandomAgent()
+
+results = run_benchmark(agent, random_agent, num_games=100)
+print(f"Win rate: {results['win_rate']:.1%}")</code></pre>
+
+<p><strong>Run Tournament:</strong></p>
+<pre><code class="language-python">from evaluation.tournament import run_tournament
+
+agents = [
+    ("Gen8", D3QNAgent("agents/d3qn/gen8_titan_LEGACY.pth")),
+    ("Gen11", D3QNAgent("agents/d3qn/gen11_CHAMPION.pth")),
+    ("Gen12", D3QNAgent("agents/d3qn/gen12_elite_3500.pth")),
+]
+
+results = run_tournament(agents, games_per_pair=20)</code></pre>
+
+<h3 id="5-4-using-mcts">5.4 Using MCTS</h3>
+<p><strong>Basic MCTS:</strong></p>
+<pre><code class="language-python">from training.mcts.mcts_agent import MCTSAgent
+from core.game import CheckersEnv
+
+env = CheckersEnv()
+mcts = MCTSAgent(simulations=1000, exploration_weight=1.414)
+
+state = env.reset()
+action = mcts.get_action(env, verbose=True)</code></pre>
+
+<p><strong>Neural MCTS:</strong></p>
+<pre><code class="language-python">from training.d3qn.agent import D3QNAgent
+
+# Load neural network for evaluation
+eval_model = D3QNAgent()
+eval_model.load_weights("agents/d3qn/gen11_CHAMPION.pth")
+
+# Create MCTS with neural evaluation
+mcts = MCTSAgent(
+    time_limit=7.0,
+    exploration_weight=2.0,
+    eval_model=eval_model.model,
+    action_manager=eval_model.action_manager,
+    device="cuda"
+)
+
+action = mcts.get_action(env, verbose=True)</code></pre>
+
+<h3 id="5-5-web-interface">5.5 Web Interface</h3>
+<p><strong>Start Server:</strong></p>
+<pre><code class="language-bash">python web/app.py</code></pre>
+<p>Access: Open browser to <a href="http://localhost:5000">http://localhost:5000</a></p>
+
+<h2 id="6-training-documentation">6. TRAINING DOCUMENTATION</h2>
+
+<h3 id="6-1-d3qn-training-process">6.1 D3QN Training Process</h3>
+<p><strong>Hyperparameters:</strong></p>
+<ul>
+    <li>Learning rate: 0.0001</li>
+    <li>Batch size: 64</li>
+    <li>Gamma (discount): 0.99</li>
+    <li>Epsilon decay: 0.995</li>
+    <li>Target network update: Every 1000 steps (soft update tau=0.001)</li>
+    <li>Replay buffer: 100,000 transitions</li>
+    <li>Gradient clipping: 1.0</li>
+</ul>
+
+<p><strong>Training Phases:</strong></p>
+<ul>
+    <li><strong>Exploration (Episodes 0-500):</strong> High epsilon (1.0→0.1)</li>
+    <li><strong>Exploitation (Episodes 500-2000):</strong> Low epsilon (0.1→0.01)</li>
+    <li><strong>Fine-tuning (Episodes 2000+):</strong> Minimal epsilon (0.01)</li>
+</ul>
+
+<p><strong>Reward Structure:</strong></p>
+<ul>
+    <li>Win: +1.0</li>
+    <li>Loss: -1.0</li>
+    <li>Multi-jump capture: +0.01</li>
+    <li>Single capture: +0.001</li>
+    <li>Living tax: -0.0001</li>
+</ul>
+
+<h3 id="6-2-self-play-training">6.2 Self-Play Training</h3>
+<p><strong>Process:</strong></p>
+<ul>
+    <li>Agent plays against itself</li>
+    <li>Both players share same network but use different heads (P1/P2)</li>
+    <li>Experiences stored in replay buffer</li>
+    <li>Periodic training on sampled batches</li>
+    <li>Target network updated every N steps</li>
+</ul>
+
+<p><strong>Benefits:</strong></p>
+<ul>
+    <li>No need for external opponents</li>
+    <li>Continuous improvement through competition</li>
+    <li>Balanced training data from both perspectives</li>
+</ul>
+
+<h3 id="6-3-training-stability">6.3 Training Stability</h3>
+<p><strong>Techniques Applied:</strong></p>
+<ul>
+    <li>Layer normalization after CNN</li>
+    <li>Kaiming weight initialization</li>
+    <li>Q-value scaling (×0.1)</li>
+    <li>Gradient clipping</li>
+    <li>Soft target network updates</li>
+    <li>Dual-head architecture (prevents player interference)</li>
+</ul>
+
+<h2 id="7-evaluation-benchmarking">7. EVALUATION & BENCHMARKING</h2>
+
+<h3 id="7-1-model-performance">7.1 Model Performance</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Model</th>
+            <th>Generation</th>
+            <th>Win Rate (Tournament)</th>
+            <th>vs Random</th>
+            <th>Training Episodes</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>gen8_titan_LEGACY</td>
+            <td>Gen 8</td>
+            <td>68.8%</td>
+            <td>-</td>
+            <td>3000</td>
+        </tr>
+        <tr>
+            <td>gen11_CHAMPION</td>
+            <td>Gen 11</td>
+            <td>62.5%</td>
+            <td>80%</td>
+            <td>500</td>
+        </tr>
+        <tr>
+            <td>gen12_elite_3500</td>
+            <td>Gen 12</td>
+            <td>54.2%</td>
+            <td>77%</td>
+            <td>3500</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3 id="7-2-tournament-system">7.2 Tournament System</h3>
+<p><strong>Round-Robin Format:</strong></p>
+<ul>
+    <li>Each agent plays every other agent</li>
+    <li>Multiple games per pairing (typically 10-20)</li>
+    <li>Win/loss/draw statistics tracked</li>
+    <li>ELO-style ranking</li>
+</ul>
+
+<p><strong>Swiss Tournament:</strong></p>
+<ul>
+    <li>Agents paired by similar performance</li>
+    <li>Fewer total games than round-robin</li>
+    <li>Efficient for large agent pools</li>
+</ul>
+
+<h3 id="7-3-benchmarking-metrics">7.3 Benchmarking Metrics</h3>
+<ul>
+    <li><strong>Win Rate:</strong> Percentage of games won</li>
+    <li><strong>Average Game Length:</strong> Moves per game</li>
+    <li><strong>Capture Efficiency:</strong> Captures per game</li>
+    <li><strong>King Promotion Rate:</strong> Kings created per game</li>
+    <li><strong>Decision Time:</strong> Average time per move</li>
+</ul>
+
+<h2 id="8-project-report-summary">8. PROJECT REPORT SUMMARY</h2>
+
+<h3 id="8-1-objectives">8.1 Objectives</h3>
+<p>Develop a competitive checkers AI using deep reinforcement learning and tree search algorithms.</p>
+
+<h3 id="8-2-methodology">8.2 Methodology</h3>
+<ul>
+    <li>Implemented D3QN with dual-head architecture</li>
+    <li>Integrated MCTS with neural network evaluation</li>
+    <li>Self-play training for continuous improvement</li>
+    <li>Comprehensive evaluation framework</li>
+</ul>
+
+<h3 id="8-3-key-achievements">8.3 Key Achievements</h3>
+<ul>
+    <li>68.8% tournament win rate (best model)</li>
+    <li>80% win rate against random play</li>
+    <li>Stable training with dual-head architecture</li>
+    <li>Neural-guided MCTS integration</li>
+</ul>
+
+<h3 id="8-4-technical-innovations">8.4 Technical Innovations</h3>
+<ul>
+    <li>Dual-head D3QN prevents player interference</li>
+    <li>Canonical board encoding for perspective-invariant learning</li>
+    <li>Reward shaping for strategic play</li>
+    <li>Neural network-guided MCTS</li>
+</ul>
+
+<h3 id="8-5-future-work">8.5 Future Work</h3>
+<ul>
+    <li>AlphaZero-style training</li>
+    <li>Larger neural networks</li>
+    <li>Opening book integration</li>
+    <li>Endgame tablebase</li>
+    <li>Multi-GPU training</li>
+</ul>
+
+<h2 id="9-references">9. REFERENCES</h2>
+<p><strong>Papers:</strong></p>
+<ul>
+    <li>Dueling DQN: <a href="https://arxiv.org/abs/1511.06581">https://arxiv.org/abs/1511.06581</a></li>
+    <li>Double DQN: <a href="https://arxiv.org/abs/1509.06461">https://arxiv.org/abs/1509.06461</a></li>
+    <li>MCTS: Browne et al., "A Survey of Monte Carlo Tree Search Methods"</li>
+</ul>
+
+<p><strong>Checkers Rules:</strong></p>
+<ul>
+    <li>FIDA Official Rules: <a href="https://www.fda.org.uk/">https://www.fda.org.uk/</a></li>
+</ul>
+
+<p><strong>Code Repository:</strong></p>
+<ul>
+    <li>GitHub: <a href="https://github.com/Anasmtaweh/Checkers-Ml_D3QN_MCTSn">https://github.com/Anasmtaweh/Checkers-Ml_D3QN_MCTSn</a></li>
+</ul>
+
+</body>
+</html>

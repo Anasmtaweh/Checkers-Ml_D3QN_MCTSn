@@ -27,6 +27,7 @@ class ActionManager:
         """
         Pre-calculate every theoretically possible move on an 8x8 board.
         Assigns unique integer IDs to each (start, landing) pair.
+        Only includes moves whose landing squares are playable dark squares.
         """
         moves = []
         
@@ -39,7 +40,8 @@ class ActionManager:
                     for dr in [-1, 1]:
                         for dc in [-1, 1]:
                             nr, nc = r + dr, c + dc
-                            if 0 <= nr < 8 and 0 <= nc < 8:
+                            # Only include if landing square is valid and on dark square
+                            if 0 <= nr < 8 and 0 <= nc < 8 and (nr + nc) % 2 == 1:
                                 move = ((r, c), (nr, nc))
                                 moves.append(move)
                     
@@ -48,7 +50,8 @@ class ActionManager:
                     for dr in [-2, 2]:
                         for dc in [-2, 2]:
                             nr, nc = r + dr, c + dc
-                            if 0 <= nr < 8 and 0 <= nc < 8:
+                            # Only include if landing square is valid and on dark square
+                            if 0 <= nr < 8 and 0 <= nc < 8 and (nr + nc) % 2 == 1:
                                 move = ((r, c), (nr, nc))
                                 moves.append(move)
         
@@ -91,13 +94,14 @@ class ActionManager:
         """
         return self.id_to_move.get(action_id, ((-1, -1), (-1, -1)))
     
-    def make_legal_action_mask(self, legal_moves: List[Any]) -> torch.Tensor:
+    def make_legal_action_mask(self, legal_moves: List[Any], player: int = 1) -> torch.Tensor:
         """
         Create a boolean mask tensor indicating which actions are legal.
         
         Args:
             legal_moves: List of legal moves from the environment.
-                Can be simple moves or capture sequences.
+                Can be simple moves or single capture steps.
+            player: Current player (1 or -1). If -1, moves are flipped to canonical perspective.
                 
         Returns:
             Boolean tensor of shape [action_dim] where True indicates legal actions.
@@ -109,6 +113,10 @@ class ActionManager:
             start_landing = self._extract_start_landing(move)
             
             if start_landing is not None:
+                # Canonicalize: If player is -1 (Black), flip move to match P1 perspective
+                if player == -1:
+                    start_landing = self.flip_move(start_landing)
+                
                 action_id = self.get_action_id(start_landing)
                 if action_id >= 0:
                     mask[action_id] = True
@@ -117,12 +125,11 @@ class ActionManager:
     
     def _extract_start_landing(self, move: Any) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
         """
-        Extract (start, landing) pair from various move formats.
+        Extract (start, landing) pair from move formats.
         
         Handles:
         - Simple moves: ((r1, c1), (r2, c2))
         - Single capture step: ((r1, c1), (r2, c2), (jr, jc))
-        - Capture sequences: [((r1, c1), (r2, c2), (jr, jc)), ...]
         
         Returns:
             ((start_r, start_c), (landing_r, landing_c)) or None
@@ -130,23 +137,13 @@ class ActionManager:
         if not move:
             return None
         
-        # Case 1: Capture sequence (list of steps)
-        if isinstance(move, list):
-            if not move:
-                return None
-            # Take first step: (start, landing, jumped)
-            first_step = move[0]
-            if len(first_step) == 3:
-                return (tuple(first_step[0]), tuple(first_step[1]))
-            return None
-        
-        # Case 2: Single capture step (start, landing, jumped)
+        # Case 1: Single capture step (start, landing, jumped)
         if isinstance(move, (tuple, list)) and len(move) == 3:
             # Check if third element looks like coordinates
             if isinstance(move[2], (tuple, list)) and len(move[2]) == 2:
                 return (tuple(move[0]), tuple(move[1]))
         
-        # Case 3: Simple move ((r1, c1), (r2, c2))
+        # Case 2: Simple move ((r1, c1), (r2, c2))
         if isinstance(move, (tuple, list)) and len(move) == 2:
             if isinstance(move[0], (tuple, list)) and isinstance(move[1], (tuple, list)):
                 if len(move[0]) == 2 and len(move[1]) == 2:

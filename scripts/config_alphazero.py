@@ -24,15 +24,18 @@ CONFIGS = {
         'description': 'Fast testing configuration (1-2 hours)'
     },
     
-    # Standard training (overnight)
+    # Standard training (OPTIMIZED FOR RTX 2060 + CHECKERS)
     'standard': {
         'NUM_ITERATIONS': 100,
         'GAMES_PER_ITERATION': 12,
         'TRAIN_EPOCHS': 10,
-        'MCTS_SIMULATIONS': 800,
-        'BATCH_SIZE': 256,
-        'BUFFER_SIZE': 10000,
-        'description': 'Standard training configuration (8-12 hours)'
+        # OPTIMIZATION 1: 300 is the sweet spot (Deep tactics, fast play)
+        'MCTS_SIMULATIONS': 300,  
+        # OPTIMIZATION 2: Larger batch for RTX 2060 (Faster training)
+        'BATCH_SIZE': 512,        
+        # OPTIMIZATION 3: Big memory to prevent "forgetting" old strategies
+        'BUFFER_SIZE': 50000,     
+        'description': 'Optimized Checkers training (High Quality)'
     },
     
     # Production training (multiple days)
