@@ -65,6 +65,7 @@ def initialize_csv_log(filepath: str):
                 'mcts_draw_value',
                 'iteration', 'timestamp', 'p1_wins', 'p2_wins', 'draws',
                 'p1_win_rate', 'p2_win_rate', 'draw_rate', 'avg_game_length',
+                'move_mapping_failures',
                 'total_loss', 'value_loss', 'policy_loss', 'buffer_size', 'elapsed_time_s'
             ])
         print(f"✓ Created CSV log: {filepath}")
@@ -81,7 +82,8 @@ def log_to_csv(filepath: str, data: Dict[str, Any]):
             data['mcts_draw_value'],
             data['iteration'], data['timestamp'], data['p1_wins'], data['p2_wins'],
             data['draws'], data['p1_win_rate'], data['p2_win_rate'], data['draw_rate'],
-            data['avg_game_length'], data['total_loss'], data['value_loss'],
+            data['avg_game_length'], data['move_mapping_failures'],
+            data['total_loss'], data['value_loss'],
             data['policy_loss'], data['buffer_size'], data['elapsed_time']
         ])
 
@@ -118,10 +120,27 @@ def main():
     CFG = CONFIGS[args.config]
     print_config(args.config)
 
-    env_max_moves = CFG.get('ENV_MAX_MOVES', 200)
-    no_progress_plies = CFG.get('NO_PROGRESS_PLIES', 80)
-    draw_penalty = CFG.get('DRAW_PENALTY', -0.1)
-    mcts_draw_value = CFG.get('MCTS_DRAW_VALUE', draw_penalty)
+    # Get base config (handle phased curriculum)
+    if 'phases' in CFG:
+        first_phase = CFG['phases'][0]
+        env_max_moves = first_phase.get('ENV_MAX_MOVES', 200)
+        no_progress_plies = first_phase.get('NO_PROGRESS_PLIES', 80)
+        draw_penalty = first_phase.get('DRAW_PENALTY', -0.1)
+        mcts_draw_value = first_phase.get('MCTS_DRAW_VALUE', draw_penalty)
+        dirichlet_epsilon = first_phase.get('DIRICHLET_EPSILON', 0.1)
+        temp_threshold = first_phase.get('TEMP_THRESHOLD', 20)
+        mcts_simulations = first_phase.get('MCTS_SIMULATIONS', 400)
+        search_draw_bias = first_phase.get('MCTS_SEARCH_DRAW_BIAS', -0.03)
+        print(f"  Initialized with Phase 1 settings: sims={mcts_simulations}, draw_bias={search_draw_bias}")
+    else:
+        env_max_moves = CFG.get('ENV_MAX_MOVES', 200)
+        no_progress_plies = CFG.get('NO_PROGRESS_PLIES', 80)
+        draw_penalty = CFG.get('DRAW_PENALTY', -0.1)
+        mcts_draw_value = CFG.get('MCTS_DRAW_VALUE', draw_penalty)
+        dirichlet_epsilon = CFG.get('DIRICHLET_EPSILON', 0.1)
+        temp_threshold = CFG.get('TEMP_THRESHOLD', 20)
+        mcts_simulations = CFG.get('MCTS_SIMULATIONS', 400)
+        search_draw_bias = CFG.get('MCTS_SEARCH_DRAW_BIAS', -0.03)
 
     # Determine start iteration
     start_iter = args.resume if args.resume is not None else RESUME_FROM_ITERATION
@@ -149,10 +168,10 @@ def main():
         action_manager=action_manager,
         encoder=encoder,
         c_puct=1.5,
-        num_simulations=CFG['MCTS_SIMULATIONS'], # Pulls 300 from Config
+        num_simulations=mcts_simulations, # Pulls from extracted config
         device=device,
-        dirichlet_alpha=0.6,
-        dirichlet_epsilon=0.25,
+        dirichlet_alpha=0.3,
+        dirichlet_epsilon=0.1,
         draw_value=mcts_draw_value,
     )
 
@@ -160,7 +179,7 @@ def main():
     optimizer = optim.Adam(
         model.network.parameters(),
         lr=0.001,
-        weight_decay=1e-4
+        weight_decay=1e-3
     )
 
     # Trainer
@@ -171,13 +190,13 @@ def main():
         board_encoder=encoder,
         optimizer=optimizer,
         device=device,
-        buffer_size=CFG['BUFFER_SIZE'],  # Pulls 50000 from Config
-        batch_size=CFG['BATCH_SIZE'],    # Pulls 512 from Config
+        buffer_size=CFG['BUFFER_SIZE'],  # Pulls 5000 from Config (updated)
+        batch_size=CFG['BATCH_SIZE'],    # Pulls 256 from Config (updated)
         lr=0.001,
-        weight_decay=1e-4,
-        value_loss_weight=0.15,
+        weight_decay=1e-3,
+        value_loss_weight=1.0,
         policy_loss_weight=1.0,
-        temp_threshold=30,
+        temp_threshold=20,
         draw_penalty=draw_penalty,
         env_max_moves=env_max_moves,
         no_progress_plies=no_progress_plies,
@@ -209,6 +228,31 @@ def main():
         print(f"ITERATION {iteration}/{CFG['NUM_ITERATIONS']}")
         print(f"{'='*70}")
 
+        # Apply phase-specific parameters if using phased curriculum
+        if 'phases' in CFG:
+            phase_cfg = None
+            for phase in CFG['phases']:
+                if phase['iter_start'] <= iteration <= phase['iter_end']:
+                    phase_cfg = phase
+                    break
+            
+            if phase_cfg:
+                print(f"\n📋 {phase_cfg['name']}")
+                # Update MCTS parameters
+                mcts.num_simulations = phase_cfg.get('MCTS_SIMULATIONS', mcts.num_simulations)
+                mcts.dirichlet_epsilon = phase_cfg.get('DIRICHLET_EPSILON', mcts.dirichlet_epsilon)
+                mcts.search_draw_bias = phase_cfg.get('MCTS_SEARCH_DRAW_BIAS', mcts.search_draw_bias)
+                
+                # Update trainer parameters
+                trainer.temp_threshold = phase_cfg.get('TEMP_THRESHOLD', trainer.temp_threshold)
+                trainer.env_max_moves = phase_cfg.get('ENV_MAX_MOVES', trainer.env_max_moves)
+                trainer.no_progress_plies = phase_cfg.get('NO_PROGRESS_PLIES', trainer.no_progress_plies)
+                trainer.draw_penalty = phase_cfg.get('DRAW_PENALTY', trainer.draw_penalty)
+                mcts.draw_value = phase_cfg.get('MCTS_DRAW_VALUE', mcts.draw_value)
+                
+                print(f"  MCTS sims: {mcts.num_simulations}, Dirichlet ε: {mcts.dirichlet_epsilon}, Search bias: {mcts.search_draw_bias}")
+                print(f"  Temp threshold: {trainer.temp_threshold}, Max moves: {trainer.env_max_moves}, No-progress: {trainer.no_progress_plies}")
+
         # 1. Self Play
         print(f"\n[1/2] Self-Play ({CFG['GAMES_PER_ITERATION']} games)...")
         sp_stats = trainer.self_play(num_games=CFG['GAMES_PER_ITERATION'], verbose=True)
@@ -222,17 +266,18 @@ def main():
         
         log_data = {
             'config_name': args.config,
-            'mcts_simulations': CFG['MCTS_SIMULATIONS'],
-            'env_max_moves': env_max_moves,
-            'no_progress_plies': no_progress_plies,
-            'draw_penalty': draw_penalty,
-            'mcts_draw_value': mcts_draw_value,
+            'mcts_simulations': mcts.num_simulations,
+            'env_max_moves': trainer.env_max_moves,
+            'no_progress_plies': trainer.no_progress_plies,
+            'draw_penalty': trainer.draw_penalty,
+            'mcts_draw_value': mcts.draw_value,
             'iteration': iteration,
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'p1_wins': sp_stats['p1_wins'], 'p2_wins': sp_stats['p2_wins'],
             'draws': sp_stats['draws'], 'p1_win_rate': sp_stats['p1_win_rate'],
             'p2_win_rate': sp_stats['p2_win_rate'], 'draw_rate': sp_stats['draw_rate'],
             'avg_game_length': sp_stats['avg_game_length'],
+            'move_mapping_failures': sp_stats.get('move_mapping_failures', 0),
             'total_loss': train_stats['loss'], 'value_loss': train_stats['value_loss'],
             'policy_loss': train_stats['policy_loss'],
             'buffer_size': sp_stats['buffer_size'], 'elapsed_time': elapsed

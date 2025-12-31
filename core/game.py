@@ -85,6 +85,10 @@ class CheckersEnv:
 
         return False, 0
 
+    def check_game_over(self) -> Tuple[bool, int]:
+        """Public alias for _check_game_over."""
+        return self._check_game_over()
+
     # ------------------------------------------------------------------
     # Move format utilities
     # ------------------------------------------------------------------

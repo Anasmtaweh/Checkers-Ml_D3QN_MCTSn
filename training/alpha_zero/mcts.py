@@ -34,7 +34,7 @@ class MCTS:
     def __init__(self, model, action_manager, encoder, c_puct: float = 1.5, 
                  num_simulations: int = 400, device: str = "cpu",
                  dirichlet_alpha: float = 0.3, dirichlet_epsilon: float = 0.25,
-                 draw_value: float = -0.1):
+                 draw_value: float = -0.1, search_draw_bias: float = -0.03):
         self.model = model
         self.action_manager = action_manager
         self.encoder = encoder
@@ -44,6 +44,7 @@ class MCTS:
         self.dirichlet_alpha = dirichlet_alpha
         self.dirichlet_epsilon = dirichlet_epsilon
         self.draw_value = float(draw_value)
+        self.search_draw_bias = float(search_draw_bias)
         self.model.eval()
     
     def get_action_prob(self, env, temp: float = 1.0, training: bool = True) -> Tuple[np.ndarray, AlphaNode]:        # Create root
@@ -76,17 +77,24 @@ class MCTS:
         # Terminal check
         if env.done:
             # Terminal evaluation from node's perspective
-            # draw -> 0.0
+            # draw -> 0.0 (Neutral True Reward)
             # else -> +1.0 if winner == node.player_to_move else -1.0
             if env.winner == 0:
-                value = self.draw_value
+                value = 0.0
+                
+                # DRAW AVERSION: Configurable bias during search to break deadlocks
+                # This makes the agent prefer a non-drawing line if all else is equal
+                # We do NOT use this for training targets (which remain 0.0)
+                biased_value = value + self.search_draw_bias
+                
+                node.value_sum += value
+                node.visits += 1
+                return biased_value
             else:
                 value = 1.0 if env.winner == node.player_to_move else -1.0
-            
-            # Update stats locally (Recursive Backprop)
-            node.value_sum += value
-            node.visits += 1
-            return value
+                node.value_sum += value
+                node.visits += 1
+                return value
         
         # Leaf -> Expand
         if node.is_leaf():
@@ -170,7 +178,8 @@ class MCTS:
         sqrt_total_visits = np.sqrt(node.visits + 1)
         
         for action_id, child in node.children.items():
-            # Value is flipped because child stores value for opponent
+            # CORRECTED: Use child Q-value directly (already from opponent's perspective)
+            # The negation happens during backprop, not during selection
             q_value = -child.q_value  
             
             exploration_bonus = self.c_puct * child.prior * sqrt_total_visits / (1 + child.visits)

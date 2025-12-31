@@ -17,8 +17,8 @@ CONFIGS = {
     'quick_test': {
         'ENV_MAX_MOVES': 200,
         'NO_PROGRESS_PLIES': 80,
-        'DRAW_PENALTY': -0.1,
-        'MCTS_DRAW_VALUE': -0.1,
+        'DRAW_PENALTY': 0.0,
+        'MCTS_DRAW_VALUE': 0.0,
         'NUM_ITERATIONS': 10,
         'GAMES_PER_ITERATION': 10,
         'TRAIN_EPOCHS': 5,
@@ -32,26 +32,75 @@ CONFIGS = {
     'standard': {
         'ENV_MAX_MOVES': 200,
         'NO_PROGRESS_PLIES': 80,
-        'DRAW_PENALTY': -0.1,
-        'MCTS_DRAW_VALUE': -0.1,
+        'DRAW_PENALTY': -0.05,      # ← CHANGED from 0.0
+        'MCTS_DRAW_VALUE': -0.05,   # ← CHANGED from 0.0
         'NUM_ITERATIONS': 100,
         'GAMES_PER_ITERATION': 12,
         'TRAIN_EPOCHS': 10,
-        # OPTIMIZATION 1: 300 is the sweet spot (Deep tactics, fast play)
-        'MCTS_SIMULATIONS': 300,  
-        # OPTIMIZATION 2: Larger batch for RTX 2060 (Faster training)
-        'BATCH_SIZE': 512,        
-        # OPTIMIZATION 3: Big memory to prevent "forgetting" old strategies
-        'BUFFER_SIZE': 50000,     
+        'MCTS_SIMULATIONS': 800,    # ← CHANGED from 300
+        'BATCH_SIZE': 256,          # ← CHANGED from 512
+        'BUFFER_SIZE': 5000,        # ← CHANGED from 50000
         'description': 'Optimized Checkers training (High Quality)'
+    },
+    
+    # Phased curriculum training (FIXES DRAW INFLATION)
+    'phased_curriculum': {
+        'NUM_ITERATIONS': 100,
+        'GAMES_PER_ITERATION': 12,
+        'TRAIN_EPOCHS': 10,
+        'BATCH_SIZE': 256,
+        'BUFFER_SIZE': 5000,
+        'description': 'Phased curriculum to reduce draw inflation',
+        # Phase-based parameters (iteration ranges)
+        'phases': [
+            {
+                'name': 'Phase A: Early Exploration (Iter 1-10)',
+                'iter_start': 1,
+                'iter_end': 10,
+                'MCTS_SIMULATIONS': 400,
+                'DIRICHLET_EPSILON': 0.15,
+                'TEMP_THRESHOLD': 15,
+                'NO_PROGRESS_PLIES': 60,
+                'ENV_MAX_MOVES': 180,
+                'DRAW_PENALTY': -0.05,
+                'MCTS_DRAW_VALUE': -0.06,
+                'MCTS_SEARCH_DRAW_BIAS': -0.06,
+            },
+            {
+                'name': 'Phase B: Balanced Growth (Iter 11-30)',
+                'iter_start': 11,
+                'iter_end': 30,
+                'MCTS_SIMULATIONS': 600,
+                'DIRICHLET_EPSILON': 0.10,
+                'TEMP_THRESHOLD': 20,
+                'NO_PROGRESS_PLIES': 70,
+                'ENV_MAX_MOVES': 190,
+                'DRAW_PENALTY': -0.05,
+                'MCTS_DRAW_VALUE': -0.05,
+                'MCTS_SEARCH_DRAW_BIAS': -0.05,
+            },
+            {
+                'name': 'Phase C: Full Strength (Iter 31+)',
+                'iter_start': 31,
+                'iter_end': 1000,
+                'MCTS_SIMULATIONS': 800,
+                'DIRICHLET_EPSILON': 0.10,
+                'TEMP_THRESHOLD': 20,
+                'NO_PROGRESS_PLIES': 80,
+                'ENV_MAX_MOVES': 200,
+                'DRAW_PENALTY': -0.05,
+                'MCTS_DRAW_VALUE': -0.05,
+                'MCTS_SEARCH_DRAW_BIAS': -0.03,
+            },
+        ]
     },
     
     # Production training (multiple days)
     'production': {
         'ENV_MAX_MOVES': 200,
         'NO_PROGRESS_PLIES': 80,
-        'DRAW_PENALTY': -0.1,
-        'MCTS_DRAW_VALUE': -0.1,
+        'DRAW_PENALTY': 0.0,
+        'MCTS_DRAW_VALUE': 0.0,
         'NUM_ITERATIONS': 500,
         'GAMES_PER_ITERATION': 100,
         'TRAIN_EPOCHS': 20,
@@ -65,8 +114,8 @@ CONFIGS = {
     'competition': {
         'ENV_MAX_MOVES': 200,
         'NO_PROGRESS_PLIES': 80,
-        'DRAW_PENALTY': -0.1,
-        'MCTS_DRAW_VALUE': -0.1,
+        'DRAW_PENALTY': 0.0,
+        'MCTS_DRAW_VALUE': 0.0,
         'NUM_ITERATIONS': 1000,
         'GAMES_PER_ITERATION': 200,
         'TRAIN_EPOCHS': 30,

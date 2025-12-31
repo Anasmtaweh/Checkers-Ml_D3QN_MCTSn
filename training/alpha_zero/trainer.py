@@ -47,6 +47,7 @@ class AlphaZeroTrainer:
         draw_penalty: float = -0.1,
         env_max_moves: int = 200,
         no_progress_plies: int = 80,
+        dirichlet_epsilon: float = 0.1,
     ):
         """
         Initialize AlphaZero trainer.
@@ -90,7 +91,7 @@ class AlphaZeroTrainer:
             self.optimizer = optim.Adam(
                 self.model.network.parameters(),
                 lr=lr,
-                weight_decay=weight_decay,
+                weight_decay=1e-3,
             )
         else:
             self.optimizer = optimizer
@@ -133,18 +134,23 @@ class AlphaZeroTrainer:
 
         # 0.22 GPU allows 4 workers (0.88 total usage)
         @ray.remote(num_gpus=0.22)
-        def play_game_remote(
-            model_state_dict,
-            action_dim,
-            c_puct,
-            num_sims,
-            temp_threshold,
-            dirichlet_alpha,
-            dirichlet_epsilon,
-            env_max_moves,
-            no_progress_plies,
-            mcts_draw_value,
-        ):
+        def play_game_remote(params: Dict[str, Any]) -> Dict[str, Any]:
+            """Remote worker for parallel self-play games.
+            
+            Args:
+                params: Dictionary containing:
+                    - model_state_dict: Model weights
+                    - action_dim: Action space dimension
+                    - c_puct: MCTS exploration constant
+                    - num_sims: Number of MCTS simulations
+                    - temp_threshold: Move number for temperature switch
+                    - dirichlet_alpha: Dirichlet noise alpha
+                    - dirichlet_epsilon: Dirichlet noise epsilon
+                    - env_max_moves: Maximum moves per game
+                    - no_progress_plies: No-progress limit
+                    - mcts_draw_value: Draw value for MCTS
+                    - search_draw_bias: Search-time draw bias
+            """
             import torch
             import numpy as np
             from core.game import CheckersEnv
@@ -157,40 +163,42 @@ class AlphaZeroTrainer:
 
             action_manager = ActionManager(device)
             encoder = CheckersBoardEncoder()
-            model = AlphaZeroModel(action_dim, device)
-            model.network.load_state_dict(model_state_dict)
+            model = AlphaZeroModel(params["action_dim"], device)
+            model.network.load_state_dict(params["model_state_dict"])
             model.eval()
 
             mcts = MCTS(
                 model=model,
                 action_manager=action_manager,
                 encoder=encoder,
-                c_puct=c_puct,
-                num_simulations=num_sims,
+                c_puct=params["c_puct"],
+                num_simulations=params["num_sims"],
                 device=device,
-                dirichlet_alpha=dirichlet_alpha,
-                dirichlet_epsilon=dirichlet_epsilon,
-                draw_value=mcts_draw_value,
+                dirichlet_alpha=params["dirichlet_alpha"],
+                dirichlet_epsilon=params["dirichlet_epsilon"],
+                draw_value=params["mcts_draw_value"],
+                search_draw_bias=params["search_draw_bias"],
             )
 
-            env = CheckersEnv(max_moves=env_max_moves, no_progress_limit=no_progress_plies)
+            env = CheckersEnv(max_moves=params["env_max_moves"], no_progress_limit=params["no_progress_plies"])
             env.reset()
 
             states, players, policies = [], [], []
             move_count = 0
             winner = 0
+            move_mapping_failures = 0
 
             while not env.done:
                 move_count += 1
 
                 # Adaptive exploration
-                if move_count <= temp_threshold:
+                if move_count <= params["temp_threshold"]:
                     current_alpha = 0.8
                 else:
                     current_alpha = 0.4
                 mcts.dirichlet_alpha = current_alpha
 
-                temp = 1.0 if move_count <= temp_threshold else 0.0
+                temp = 1.0 if move_count <= params["temp_threshold"] else 0.0
                 is_exploring = temp > 0
 
                 action_probs, _ = mcts.get_action_prob(env, temp=temp, training=is_exploring)
@@ -216,33 +224,42 @@ class AlphaZeroTrainer:
 
                 move = mcts._get_move_from_action(action_id, legal_moves, player=env.current_player)  # type: ignore
                 if move is None:
-                    # Treat as terminal-loss signal for safety (optional)
-                    winner = -env.current_player
-                    break
+                    move_mapping_failures += 1
+                    move = legal_moves[0] if legal_moves else None
+                    if move is None:
+                        # Treat as terminal-loss signal for safety (optional)
+                        winner = -env.current_player
+                        break
 
                 _, _, done, info = env.step(move)
                 if done:
                     winner = info["winner"]
                     break
 
-            return {"states": states, "players": players, "policies": policies, "winner": winner}
+            return {
+                "states": states,
+                "players": players,
+                "policies": policies,
+                "winner": winner,
+                "move_mapping_failures": move_mapping_failures,
+            }
 
         futures = []
         for _ in range(num_games):
-            futures.append(
-                play_game_remote.remote(  # type: ignore
-                    model_state,
-                    self.action_manager.action_dim,
-                    self.mcts.c_puct,
-                    self.mcts.num_simulations,
-                    self.temp_threshold,
-                    self.mcts.dirichlet_alpha,
-                    self.mcts.dirichlet_epsilon,
-                    self.env_max_moves,
-                    self.no_progress_plies,
-                    getattr(self.mcts, "draw_value", self.draw_penalty),
-                )
-            )
+            params = {
+                "model_state_dict": model_state,
+                "action_dim": self.action_manager.action_dim,
+                "c_puct": self.mcts.c_puct,
+                "num_sims": self.mcts.num_simulations,
+                "temp_threshold": self.temp_threshold,
+                "dirichlet_alpha": self.mcts.dirichlet_alpha,
+                "dirichlet_epsilon": self.mcts.dirichlet_epsilon,
+                "env_max_moves": self.env_max_moves,
+                "no_progress_plies": self.no_progress_plies,
+                "mcts_draw_value": getattr(self.mcts, "draw_value", self.draw_penalty),
+                "search_draw_bias": getattr(self.mcts, "search_draw_bias", -0.03),
+            }
+            futures.append(play_game_remote.remote(params))  # type: ignore
 
         results = ray.get(futures)
 
@@ -252,11 +269,13 @@ class AlphaZeroTrainer:
             "p2_wins": 0,
             "draws": 0,
             "total_moves": 0,
+            "move_mapping_failures": 0,
         }
 
         for game_data in results:
             stats["games_played"] += 1
             stats["total_moves"] += len(game_data["states"])
+            stats["move_mapping_failures"] += int(game_data.get("move_mapping_failures", 0))
 
             winner = game_data["winner"]
             if winner == 1:
@@ -284,6 +303,7 @@ class AlphaZeroTrainer:
             print(f"    P2 Wins: {stats['p2_wins']} ({stats['p2_win_rate']:.1%})")
             print(f"    Draws: {stats['draws']} ({stats['draw_rate']:.1%})")
             print(f"    Avg Game Length: {stats['avg_game_length']:.1f} moves")
+            print(f"    Move mapping failures: {stats['move_mapping_failures']}")
             print(f"    Buffer Size: {stats['buffer_size']}")
             print(f"  Self-play completed in {elapsed:.1f}s")
 
@@ -355,7 +375,7 @@ class AlphaZeroTrainer:
             elif winner == -1:
                 z = 1.0 if player == -1 else -1.0
             else:
-                z = self.draw_penalty
+                z = 0.0
 
             self.replay_buffer.append((states[i].cpu(), policies[i], z))
 
@@ -439,6 +459,14 @@ class AlphaZeroTrainer:
             value_targets = batch_data["value_targets"].to(self.device)
 
             policy_logits, value_pred = self.model.get_policy_value(states)
+
+            with torch.no_grad():
+                tgt_sum = policy_targets.sum(dim=1).mean().item()
+                pred_sum = torch.exp(policy_logits).sum(dim=1).mean().item()
+                # Compute policy entropy for diagnostics
+                probs = torch.exp(policy_logits)
+                entropy = -(probs * policy_logits).sum(dim=1).mean().item()
+            print(f"  policy_targets_sum={tgt_sum:.6f}, exp(policy_logits)_sum={pred_sum:.6f}, avg_policy_entropy={entropy:.4f}")
 
             value_loss = self._compute_value_loss(value_pred, value_targets)
             policy_loss = self._compute_policy_loss(policy_logits, policy_targets)

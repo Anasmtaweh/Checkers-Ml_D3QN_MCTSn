@@ -93,11 +93,7 @@ class AlphaZeroNet(nn.Module):
     def _init_weights(self):
         """
         Initialize network weights using Kaiming initialization.
-        
-        This ensures:
-        - CNN layers start with appropriate variance for ReLU activations
-        - Fully connected layers don't explode or vanish initially
-        - Biases start at zero
+        Special handling for value head to prevent saturation.
         """
         for module in self.modules():
             if isinstance(module, nn.Conv2d):
@@ -105,9 +101,17 @@ class AlphaZeroNet(nn.Module):
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0.0)
             elif isinstance(module, nn.Linear):
-                nn.init.kaiming_normal_(module.weight, nonlinearity='relu')
-                if module.bias is not None:
-                    nn.init.constant_(module.bias, 0.0)
+                # Check if this is the final value head layer
+                if module.out_features == 1:
+                    # Value head: use smaller initialization to prevent saturation
+                    nn.init.uniform_(module.weight, -0.01, 0.01)
+                    if module.bias is not None:
+                        nn.init.constant_(module.bias, 0.0)
+                else:
+                    # Other layers: use Kaiming
+                    nn.init.kaiming_normal_(module.weight, nonlinearity='relu')
+                    if module.bias is not None:
+                        nn.init.constant_(module.bias, 0.0)
             elif isinstance(module, nn.BatchNorm2d):
                 nn.init.constant_(module.weight, 1.0)
                 nn.init.constant_(module.bias, 0.0)
