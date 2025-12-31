@@ -59,12 +59,12 @@ CONFIGS = {
                 'iter_end': 10,
                 'MCTS_SIMULATIONS': 400,
                 'DIRICHLET_EPSILON': 0.15,
-                'TEMP_THRESHOLD': 15,
+                'TEMP_THRESHOLD': 10,
                 'NO_PROGRESS_PLIES': 60,
-                'ENV_MAX_MOVES': 180,
+                'ENV_MAX_MOVES': 160,
                 'DRAW_PENALTY': -0.05,
-                'MCTS_DRAW_VALUE': -0.06,
-                'MCTS_SEARCH_DRAW_BIAS': -0.06,
+                'MCTS_DRAW_VALUE': -0.05,
+                #'MCTS_SEARCH_DRAW_BIAS': -0.06,
             },
             {
                 'name': 'Phase B: Balanced Growth (Iter 11-30)',
@@ -77,7 +77,7 @@ CONFIGS = {
                 'ENV_MAX_MOVES': 190,
                 'DRAW_PENALTY': -0.05,
                 'MCTS_DRAW_VALUE': -0.05,
-                'MCTS_SEARCH_DRAW_BIAS': -0.05,
+                #'MCTS_SEARCH_DRAW_BIAS': -0.05,
             },
             {
                 'name': 'Phase C: Full Strength (Iter 31+)',
@@ -90,7 +90,7 @@ CONFIGS = {
                 'ENV_MAX_MOVES': 200,
                 'DRAW_PENALTY': -0.05,
                 'MCTS_DRAW_VALUE': -0.05,
-                'MCTS_SEARCH_DRAW_BIAS': -0.03,
+                #'MCTS_SEARCH_DRAW_BIAS': -0.03,
             },
         ]
     },
@@ -123,9 +123,22 @@ CONFIGS = {
         'BATCH_SIZE': 1024,
         'BUFFER_SIZE': 100000,
         'description': 'High-quality training (1+ week)'
+    },
+
+    'smoke_test': {
+        'ENV_MAX_MOVES': 100,
+        'NO_PROGRESS_PLIES': 40, # type: ignore
+        'DRAW_PENALTY': -0.2,  # Aggressive to test effect quickly
+        'MCTS_DRAW_VALUE': -0.2,
+        'NUM_ITERATIONS': 3,
+        'GAMES_PER_ITERATION': 6,
+        'TRAIN_EPOCHS': 3,
+        'MCTS_SIMULATIONS': 100,
+        'BATCH_SIZE': 64,
+        'BUFFER_SIZE': 500,
+        'description': 'Fast smoke test (10 minutes) - validates draw handling'
     }
 }
-
 
 def print_config(config_name: str):
     """Print configuration details."""

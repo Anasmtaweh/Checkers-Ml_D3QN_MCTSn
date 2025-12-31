@@ -80,16 +80,25 @@ class MCTS:
             # draw -> 0.0 (Neutral True Reward)
             # else -> +1.0 if winner == node.player_to_move else -1.0
             if env.winner == 0:
-                value = 0.0
+                value = self.draw_value 
                 
-                # DRAW AVERSION: Configurable bias during search to break deadlocks
-                # This makes the agent prefer a non-drawing line if all else is equal
-                # We do NOT use this for training targets (which remain 0.0)
-                biased_value = value + self.search_draw_bias
+                # ==================== DIAGNOSTIC 2: MCTS Draw Value Check ====================
+                # Assert draw_value is negative (draw aversion)
+                assert abs(self.draw_value) > 0.0001, (
+                    f"MCTS draw_value={self.draw_value:.4f} is near-zero! "
+                    f"This will cause draw inflation. Check config."
+                )
+                # Periodic logging (every 50th draw terminal)
+                if not hasattr(self, '_draw_terminal_count'):
+                    self._draw_terminal_count = 0
+                self._draw_terminal_count += 1
+                if self._draw_terminal_count % 50 == 0:
+                    print(f"  [MCTS Check] {self._draw_terminal_count} draw terminals evaluated at value={self.draw_value:.4f}")
+                # =============================================================================
                 
                 node.value_sum += value
                 node.visits += 1
-                return biased_value
+                return value
             else:
                 value = 1.0 if env.winner == node.player_to_move else -1.0
                 node.value_sum += value

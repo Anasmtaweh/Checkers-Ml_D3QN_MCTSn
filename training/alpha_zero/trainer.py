@@ -109,7 +109,7 @@ class AlphaZeroTrainer:
     # SELF-PLAY: Generate Training Data
     # ================================================================
 
-    def self_play(self, num_games: int, verbose: bool = True) -> Dict[str, Any]:
+    def self_play(self, num_games: int, verbose: bool = True, iteration: int = 0) -> Dict[str, Any]:
         """Self-play using Ray for parallel GPU execution."""
         start_time = time.time()
 
@@ -122,9 +122,7 @@ class AlphaZeroTrainer:
                 ignore_reinit_error=True,
                 logging_level="ERROR",
                 log_to_driver=False,
-                _system_config={
-                    "metrics_report_interval_ms": 0,
-                },
+                
             )
 
         if verbose:
@@ -305,6 +303,19 @@ class AlphaZeroTrainer:
             print(f"    Avg Game Length: {stats['avg_game_length']:.1f} moves")
             print(f"    Move mapping failures: {stats['move_mapping_failures']}")
             print(f"    Buffer Size: {stats['buffer_size']}")
+            
+            # ==================== DIAGNOSTIC 4: Draw Rate Alert ====================
+            if stats['draw_rate'] > 0.7:
+                print(f"  ⚠️  HIGH DRAW RATE ({stats['draw_rate']:.1%})! Possible issues:")
+                print(f"      - Check draw_penalty is negative: {self.draw_penalty}")
+                print(f"      - Check MCTS draw_value matches: {self.mcts.draw_value}")
+                print(f"      - Games may be too long: avg_length={stats['avg_game_length']:.1f}")
+            elif stats['draw_rate'] < 0.15 and iteration > 5:
+                print(f"  ⚠️  VERY LOW DRAW RATE ({stats['draw_rate']:.1%}). Check if games are terminating early.")
+            else:
+                print(f"  ✓ Draw rate healthy ({stats['draw_rate']:.1%})")
+            # ======================================================================
+            
             print(f"  Self-play completed in {elapsed:.1f}s")
 
         return stats
@@ -375,9 +386,30 @@ class AlphaZeroTrainer:
             elif winner == -1:
                 z = 1.0 if player == -1 else -1.0
             else:
-                z = 0.0
+                z = self.draw_penalty
 
             self.replay_buffer.append((states[i].cpu(), policies[i], z))
+            
+            # ==================== DIAGNOSTIC 1: Buffer Sanity Check (FIXED) ====================
+            if len(self.replay_buffer) % 100 == 0:
+                recent_samples = list(self.replay_buffer)[-100:] if len(self.replay_buffer) >= 100 else list(self.replay_buffer)
+                all_values = [v for _, _, v in recent_samples]
+                
+                # CORRECTED: Check for values matching draw_penalty (around -0.2)
+                draw_values = [v for v in all_values if abs(v - self.draw_penalty) < 0.05]
+                
+                # Value distribution
+                win_vals = sum(1 for v in all_values if v > 0.5)
+                loss_vals = sum(1 for v in all_values if v < -0.5)
+                draw_vals = len(draw_values)
+                uncertain_vals = len(all_values) - win_vals - loss_vals - draw_vals  # Network's uncertain positions
+                
+                if draw_values:
+                    avg_draw_val = np.mean(draw_values)
+                    print(f"  [Buffer Check] Draws: {draw_vals} @ avg={avg_draw_val:.3f} (expect {self.draw_penalty:.2f}) ✓")
+                
+                print(f"  [Buffer Distribution] Wins: {win_vals}, Losses: {loss_vals}, Draws: {draw_vals}, Uncertain: {uncertain_vals}")
+            # ===================================================================================
 
     def save_replay_buffer(self, path: str):
         """Save the replay buffer to disk."""
@@ -598,7 +630,7 @@ def run_training_iteration(
 
     if verbose:
         print(f"\n[1/2] Self-Play ({num_self_play_games} games)...")
-    self_play_stats = trainer.self_play(num_self_play_games, verbose=verbose)
+    self_play_stats = trainer.self_play(num_self_play_games, verbose=verbose, iteration=iteration)
 
     if verbose:
         print(f"\n[2/2] Training ({num_train_epochs} epochs)...")

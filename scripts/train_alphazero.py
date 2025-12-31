@@ -252,10 +252,21 @@ def main():
                 
                 print(f"  MCTS sims: {mcts.num_simulations}, Dirichlet ε: {mcts.dirichlet_epsilon}, Search bias: {mcts.search_draw_bias}")
                 print(f"  Temp threshold: {trainer.temp_threshold}, Max moves: {trainer.env_max_moves}, No-progress: {trainer.no_progress_plies}")
+                
+                # ==================== DIAGNOSTIC 3: Draw Parameter Consistency ====================
+                print(f"  [Draw Handling] Trainer penalty={trainer.draw_penalty:.3f}, MCTS value={mcts.draw_value:.3f}")
+                
+                # Critical assertion: these must match to avoid train/inference mismatch
+                if abs(trainer.draw_penalty - mcts.draw_value) > 0.001:
+                    print(f"  ⚠️  WARNING: Draw penalty mismatch! Trainer={trainer.draw_penalty:.3f}, MCTS={mcts.draw_value:.3f}")
+                    print(f"       This will cause the network to learn different values than MCTS evaluates.")
+                else:
+                    print(f"  ✓ Draw parameters consistent")
+                # ==================================================================================
 
         # 1. Self Play
         print(f"\n[1/2] Self-Play ({CFG['GAMES_PER_ITERATION']} games)...")
-        sp_stats = trainer.self_play(num_games=CFG['GAMES_PER_ITERATION'], verbose=True)
+        sp_stats = trainer.self_play(num_games=CFG['GAMES_PER_ITERATION'], verbose=True, iteration=iteration)
 
         # 2. Training
         print(f"\n[2/2] Training ({CFG['TRAIN_EPOCHS']} epochs)...")
