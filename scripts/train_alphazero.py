@@ -57,6 +57,12 @@ def initialize_csv_log(filepath: str):
         with open(filepath, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([
+                'config_name',
+                'mcts_simulations',
+                'env_max_moves',
+                'no_progress_plies',
+                'draw_penalty',
+                'mcts_draw_value',
                 'iteration', 'timestamp', 'p1_wins', 'p2_wins', 'draws',
                 'p1_win_rate', 'p2_win_rate', 'draw_rate', 'avg_game_length',
                 'total_loss', 'value_loss', 'policy_loss', 'buffer_size', 'elapsed_time_s'
@@ -67,6 +73,12 @@ def log_to_csv(filepath: str, data: Dict[str, Any]):
     with open(filepath, 'a', newline='') as f:
         writer = csv.writer(f)
         writer.writerow([
+            data['config_name'],
+            data['mcts_simulations'],
+            data['env_max_moves'],
+            data['no_progress_plies'],
+            data['draw_penalty'],
+            data['mcts_draw_value'],
             data['iteration'], data['timestamp'], data['p1_wins'], data['p2_wins'],
             data['draws'], data['p1_win_rate'], data['p2_win_rate'], data['draw_rate'],
             data['avg_game_length'], data['total_loss'], data['value_loss'],
@@ -105,7 +117,12 @@ def main():
     # Load Configuration
     CFG = CONFIGS[args.config]
     print_config(args.config)
-    
+
+    env_max_moves = CFG.get('ENV_MAX_MOVES', 200)
+    no_progress_plies = CFG.get('NO_PROGRESS_PLIES', 80)
+    draw_penalty = CFG.get('DRAW_PENALTY', -0.1)
+    mcts_draw_value = CFG.get('MCTS_DRAW_VALUE', draw_penalty)
+
     # Determine start iteration
     start_iter = args.resume if args.resume is not None else RESUME_FROM_ITERATION
 
@@ -135,7 +152,8 @@ def main():
         num_simulations=CFG['MCTS_SIMULATIONS'], # Pulls 300 from Config
         device=device,
         dirichlet_alpha=0.6,
-        dirichlet_epsilon=0.25
+        dirichlet_epsilon=0.25,
+        draw_value=mcts_draw_value,
     )
 
     # Optimizer
@@ -160,6 +178,9 @@ def main():
         value_loss_weight=0.15,
         policy_loss_weight=1.0,
         temp_threshold=30,
+        draw_penalty=draw_penalty,
+        env_max_moves=env_max_moves,
+        no_progress_plies=no_progress_plies,
     )
 
     print(f"  ✓ MCTS (simulations={mcts.num_simulations})")
@@ -200,6 +221,12 @@ def main():
         elapsed = time.time() - iter_start
         
         log_data = {
+            'config_name': args.config,
+            'mcts_simulations': CFG['MCTS_SIMULATIONS'],
+            'env_max_moves': env_max_moves,
+            'no_progress_plies': no_progress_plies,
+            'draw_penalty': draw_penalty,
+            'mcts_draw_value': mcts_draw_value,
             'iteration': iteration,
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'p1_wins': sp_stats['p1_wins'], 'p2_wins': sp_stats['p2_wins'],

@@ -112,7 +112,7 @@ async function onCellClick(r, c) {
         const response = await fetch('/human_move', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ move: [[selectedCell.r, selectedCell.c], [r, c]] })
+            body: JSON.stringify({ move: move })
         });
         const newState = await response.json();
         renderBoard(newState);

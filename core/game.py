@@ -17,7 +17,7 @@ class CheckersEnv:
       - light positional heuristics (center control, avoiding obvious blunders)
     """
 
-    def __init__(self, max_moves: int = 200):
+    def __init__(self, max_moves: int = 200, no_progress_limit: int = 80):
         self.board = CheckersBoard()
         self.current_player = 1  # player to move
         self.done = False
@@ -26,6 +26,8 @@ class CheckersEnv:
         self.force_capture_from: Optional[Tuple[int, int]] = None
         self.move_count = 0
         self.max_moves = max_moves
+        self.no_progress = 0
+        self.no_progress_limit = no_progress_limit
 
     # ------------------------------------------------------------------
     # Basic helpers
@@ -38,6 +40,7 @@ class CheckersEnv:
         self.winner = 0
         self.force_capture_from = None
         self.move_count = 0
+        self.no_progress = 0
         return self.board.get_state()
 
     def _piece_and_king_counts_for(self, board: np.ndarray) -> Dict[int, Dict[str, int]]:
@@ -121,28 +124,36 @@ class CheckersEnv:
     def _apply_capture_sequence(self, steps: List[CaptureStep], player: int) -> Tuple[Tuple[int, int], int, bool]:
         """
         Apply one or more capture steps.
+        WCDF: if a MAN reaches the king-row by capture, it is crowned but the move ends immediately.
         Returns (last_pos, captured_count, continue_flag).
         """
         last_pos: Optional[Tuple[int, int]] = None
+        captured_count = 0
 
         for start, landing, jumped in steps:
             sr, sc = start
             lr, lc = landing
             jr, jc = jumped
 
+            piece_before = self.board.board[sr, sc]  # 1/-1 man, 2/-2 king
             self.board.move_piece(sr, sc, lr, lc)
             self.board.board[jr, jc] = 0
-            last_pos = (lr, lc)
 
-        captured_count = len(steps)
+            last_pos = (lr, lc)
+            captured_count += 1
+
+            # WCDF: crowning during a capture ends the move (no continuation jumps).
+            if abs(piece_before) == 1 and ((player == 1 and lr == 7) or (player == -1 and lr == 0)):
+                self.force_capture_from = None
+                return last_pos, captured_count, False
+
+        safe_last_pos = last_pos if last_pos is not None else (-1, -1)
 
         more_captures = CheckersRules.capture_steps(
             self.board.get_state(),
             player,
-            forced_from=last_pos,
+            forced_from=safe_last_pos,
         )
-
-        safe_last_pos = last_pos if last_pos is not None else (-1, -1)
 
         if more_captures:
             self.force_capture_from = safe_last_pos
@@ -175,14 +186,24 @@ class CheckersEnv:
             return self.board.get_state(), -1.0, True, info
 
         captured_count = 0
+        promotion_happened = False
 
         # -----------------------
         # 1) Execute the action
         # -----------------------
         if self._is_capture_step(normalized):
             # Capture sequence (possibly length 1)
+            (r_start, c_start) = normalized[0]
+            piece_before = self.board.board[r_start, c_start]
+
             last_pos, count, must_continue = self._apply_capture_sequence([normalized], player)
             captured_count = count
+
+            if last_pos:
+                (r_end, c_end) = last_pos
+                piece_after = self.board.board[r_end, c_end]
+                if abs(piece_before) == 1 and abs(piece_after) == 2:
+                    promotion_happened = True
 
             if must_continue:
                 # IMPORTANT: same player moves again; do NOT flip current_player; do NOT increment move_count.
@@ -203,7 +224,14 @@ class CheckersEnv:
         ):
             # Simple move
             (r1, c1), (r2, c2) = normalized
+            piece_before = self.board.board[r1, c1]
+
             self.board.move_piece(r1, c1, r2, c2)
+
+            piece_after = self.board.board[r2, c2]
+            if abs(piece_before) == 1 and abs(piece_after) == 2:
+                promotion_happened = True
+
             self.current_player *= -1
 
         else:
@@ -218,7 +246,17 @@ class CheckersEnv:
         # -----------------------
         self.move_count += 1
 
+        progress = (captured_count > 0) or promotion_happened
+        if progress:
+            self.no_progress = 0
+        else:
+            self.no_progress += 1
+
         done, winner = self._check_game_over()
+
+        if not done and self.no_progress >= self.no_progress_limit:
+            done = True
+            winner = 0
 
         # Draw by move cap (applies after a completed turn)
         if not done and self.move_count >= self.max_moves:

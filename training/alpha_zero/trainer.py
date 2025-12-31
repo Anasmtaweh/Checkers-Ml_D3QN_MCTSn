@@ -13,7 +13,6 @@ os.environ["RAY_DISABLE_METRICS_COLLECTION"] = "1"
 
 import ray
 
-
 class AlphaZeroTrainer:
     """
     AlphaZero Trainer: Self-Play + Neural Network Training.
@@ -46,6 +45,8 @@ class AlphaZeroTrainer:
         policy_loss_weight: float = 1.0,
         temp_threshold: int = 30,
         draw_penalty: float = -0.1,
+        env_max_moves: int = 200,
+        no_progress_plies: int = 80,
     ):
         """
         Initialize AlphaZero trainer.
@@ -78,6 +79,8 @@ class AlphaZeroTrainer:
         self.policy_loss_weight = policy_loss_weight
         self.temp_threshold = temp_threshold
         self.draw_penalty = draw_penalty
+        self.env_max_moves = int(env_max_moves)
+        self.no_progress_plies = int(no_progress_plies)
 
         # Replay buffer: stores (state, policy_target, value_target) tuples
         self.replay_buffer: deque = deque(maxlen=buffer_size)
@@ -138,6 +141,9 @@ class AlphaZeroTrainer:
             temp_threshold,
             dirichlet_alpha,
             dirichlet_epsilon,
+            env_max_moves,
+            no_progress_plies,
+            mcts_draw_value,
         ):
             import torch
             import numpy as np
@@ -164,17 +170,17 @@ class AlphaZeroTrainer:
                 device=device,
                 dirichlet_alpha=dirichlet_alpha,
                 dirichlet_epsilon=dirichlet_epsilon,
+                draw_value=mcts_draw_value,
             )
 
-            env = CheckersEnv()
+            env = CheckersEnv(max_moves=env_max_moves, no_progress_limit=no_progress_plies)
             env.reset()
 
             states, players, policies = [], [], []
             move_count = 0
-            winner = 0  # default draw if we hit the cap
+            winner = 0
 
-            CAP = 120
-            while (not env.done) and (move_count < CAP):
+            while not env.done:
                 move_count += 1
 
                 # Adaptive exploration
@@ -219,7 +225,6 @@ class AlphaZeroTrainer:
                     winner = info["winner"]
                     break
 
-            # If we exit because CAP hit and not done, winner stays 0 (draw)
             return {"states": states, "players": players, "policies": policies, "winner": winner}
 
         futures = []
@@ -233,6 +238,9 @@ class AlphaZeroTrainer:
                     self.temp_threshold,
                     self.mcts.dirichlet_alpha,
                     self.mcts.dirichlet_epsilon,
+                    self.env_max_moves,
+                    self.no_progress_plies,
+                    getattr(self.mcts, "draw_value", self.draw_penalty),
                 )
             )
 
@@ -285,7 +293,7 @@ class AlphaZeroTrainer:
         """Play a single self-play game (non-Ray) and collect data."""
         from core.game import CheckersEnv
 
-        env = CheckersEnv()
+        env = CheckersEnv(max_moves=self.env_max_moves, no_progress_limit=self.no_progress_plies)
         env.reset()
 
         states = []
@@ -322,10 +330,6 @@ class AlphaZeroTrainer:
 
             _, _, done, info = env.step(move)
             move_count += 1
-
-            if move_count > 120:
-                print("  Warning: Game exceeded 120 moves, forcing draw")
-                break
 
         _, winner = env._check_game_over()
 
@@ -617,6 +621,9 @@ def play_game_worker_func(args):
     dirichlet_alpha = args["dirichlet_alpha"]
     dirichlet_epsilon = args["dirichlet_epsilon"]
     device = args["device"]
+    env_max_moves = args.get("env_max_moves", 200)
+    no_progress_plies = args.get("no_progress_plies", 80)
+    mcts_draw_value = args.get("mcts_draw_value", -0.1)
 
     action_manager = ActionManager(device)
     encoder = CheckersBoardEncoder()
@@ -634,9 +641,10 @@ def play_game_worker_func(args):
         device=device,
         dirichlet_alpha=dirichlet_alpha,
         dirichlet_epsilon=dirichlet_epsilon,
+        draw_value=mcts_draw_value,
     )
 
-    env = CheckersEnv()
+    env = CheckersEnv(max_moves=env_max_moves, no_progress_limit=no_progress_plies)
     env.reset()
 
     states = []
@@ -647,8 +655,6 @@ def play_game_worker_func(args):
 
     while not env.done:
         move_count += 1
-        if move_count > 150:
-            break
 
         temp = 1.0 if move_count <= temp_threshold else 0.0
         is_exploring = temp > 0

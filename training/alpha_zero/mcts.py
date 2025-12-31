@@ -33,7 +33,8 @@ class MCTS:
     
     def __init__(self, model, action_manager, encoder, c_puct: float = 1.5, 
                  num_simulations: int = 400, device: str = "cpu",
-                 dirichlet_alpha: float = 0.3, dirichlet_epsilon: float = 0.25):
+                 dirichlet_alpha: float = 0.3, dirichlet_epsilon: float = 0.25,
+                 draw_value: float = -0.1):
         self.model = model
         self.action_manager = action_manager
         self.encoder = encoder
@@ -42,6 +43,7 @@ class MCTS:
         self.device = device
         self.dirichlet_alpha = dirichlet_alpha
         self.dirichlet_epsilon = dirichlet_epsilon
+        self.draw_value = float(draw_value)
         self.model.eval()
     
     def get_action_prob(self, env, temp: float = 1.0, training: bool = True) -> Tuple[np.ndarray, AlphaNode]:        # Create root
@@ -77,7 +79,7 @@ class MCTS:
             # draw -> 0.0
             # else -> +1.0 if winner == node.player_to_move else -1.0
             if env.winner == 0:
-                value = -0.1  # Slight negative for draw to prefer winning lines
+                value = self.draw_value
             else:
                 value = 1.0 if env.winner == node.player_to_move else -1.0
             

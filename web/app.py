@@ -100,12 +100,20 @@ def get_board_state():
         "board": env.board.board.tolist(),
         "current_player": env.current_player,
         "legal_moves": serialize_moves(env.get_legal_moves()),
-        "game_over": len(env.get_legal_moves()) == 0,
-        "winner": -env.current_player if len(env.get_legal_moves()) == 0 else 0
+        "game_over": bool(env.done),
+        "winner": int(env.winner)
     }
 
 def serialize_moves(moves):
-    return [[m[0][0], m[-1][1]] if isinstance(m, list) else [m[0], m[1]] for m in moves]
+    out = []
+    for m in moves:
+        # capture step: (start, landing, jumped)
+        if isinstance(m, (list, tuple)) and len(m) == 3:
+            out.append([[m[0][0], m[0][1]], [m[1][0], m[1][1]], [m[2][0], m[2][1]]])
+        # simple move: (start, landing)
+        elif isinstance(m, (list, tuple)) and len(m) == 2:
+            out.append([[m[0][0], m[0][1]], [m[1][0], m[1][1]]])
+    return out
 
 @app.route('/')
 def index(): return render_template('index.html', agents=list(load_available_models().keys()))
@@ -127,6 +135,7 @@ def start_game():
 @app.route('/get_move', methods=['POST'])
 def get_move():
     with game_lock:
+        if env.done: return jsonify(get_board_state())
         if not env.get_legal_moves(): return jsonify(get_board_state())
         
         cp = env.current_player
@@ -136,7 +145,15 @@ def get_move():
         legal = env.get_legal_moves()
         model = models.get(name)
         selected = None
-        move_struct = None
+        move_pair = None
+
+        def pick_legal_by_pair(move_pair):
+            if move_pair is None:
+                return None
+            for m in legal:
+                if action_manager._extract_start_landing(m) == move_pair:
+                    return m
+            return None
         
         if model:
             if isinstance(model, AlphaZeroModel):
@@ -164,12 +181,8 @@ def get_move():
                 # ... (Debug printing logic) ...
                 
                 aid = int(np.argmax(probs))
-                move_struct = action_manager.get_move_from_id(aid)
-                
-                # CRITICAL FIX: If we are Player -1, the AI output a "Canonical" move (Red perspective).
-                # We must FLIP it back to Real World coordinates to execute it.
-                if cp == -1: 
-                    move_struct = action_manager.flip_move(move_struct)
+                # Let MCTS map action_id -> exact legal move (handles cp=-1 flip + capture triples)
+                selected = mcts._get_move_from_action(aid, legal, player=cp)
             else:
                 # D3QN Logic (Keep existing)
                 state = encoder.encode(env.board.get_state(), cp).unsqueeze(0).to(device)
@@ -190,19 +203,17 @@ def get_move():
                 aid = int(torch.multinomial(probs, 1).item())
                 
                 if cp == -1 and can_to_abs: aid = can_to_abs.get(aid, -1)
-                move_struct = action_manager.get_move_from_id(aid)
-
-            for m in legal:
-                start, end = (m[0][0], m[0][1]) if isinstance(m, list) else (m[0], m[1])
-                if (tuple(start), tuple(end)) == move_struct:
-                    selected = m
-                    break
+                move_pair = action_manager.get_move_from_id(aid)
+                selected = pick_legal_by_pair(move_pair)
+                if selected is None and cp == -1:
+                    # safety fallback if coords are canonical by accident
+                    selected = pick_legal_by_pair(action_manager.flip_move(move_pair))
         else:
             import random
             selected = random.choice(legal)
         
         if not selected: 
-            print(f"⚠️ Warning: Move {move_struct} illegal. Picking random fallback.")
+            print(f"⚠️ Warning: Move {move_pair} illegal. Picking random fallback.")
             selected = legal[0]
             
         env.step(selected)
@@ -213,16 +224,26 @@ def get_move():
 @app.route('/human_move', methods=['POST'])
 def human_move():
     with game_lock:
+        if env.done:
+            return jsonify(get_board_state())
+        cp = env.current_player
+        current_agent = agents_config['p1'] if cp == 1 else agents_config['p2']
+        if current_agent != 'human':
+            return jsonify({"error": "Not human turn"}), 400
+            
         move_data = request.json.get('move')
         if not move_data: return jsonify({"error": "No move"}), 400
-        start, end = tuple(move_data[0]), tuple(move_data[-1])
-        
+        start = tuple(move_data[0])
+        landing = tuple(move_data[1])
+
         for m in env.get_legal_moves():
-            m_start = m[0][0] if isinstance(m, list) else m[0]
-            m_end = m[-1][1] if isinstance(m, list) else m[1]
-            if m_start == start and m_end == end:
-                env.step(m)
+            # m is either ((start),(landing)) or ((start),(landing),(jumped))
+            m_start = tuple(m[0])
+            m_landing = tuple(m[1])
+            if m_start == start and m_landing == landing:
+                env.step(m)  # execute the exact legal move including jumped if capture
                 return jsonify(get_board_state())
+
         return jsonify({"error": "Illegal"}), 400
 
 if __name__ == '__main__':

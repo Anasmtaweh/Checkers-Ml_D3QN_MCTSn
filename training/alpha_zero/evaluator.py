@@ -16,6 +16,8 @@ from core.board_encoder import CheckersBoardEncoder
 from training.alpha_zero.network import AlphaZeroModel
 from training.alpha_zero.mcts import MCTS
 
+MAX_GAME_MOVES = 200
+
 class Arena:
     """
     The Arena: Where models fight to be the 'Best'.
@@ -65,13 +67,13 @@ class Arena:
         return results['w'], results['l'], results['d']
 
     def _play_single_game(self, red_mcts, black_mcts):
-        env = CheckersEnv()
+        env = CheckersEnv(max_moves=MAX_GAME_MOVES)
         state = env.reset()
         done = False
         moves = 0
         info = {'winner': 0}
         
-        while not done and moves < 150:
+        while not done:
             legal_moves = env.get_legal_moves()
             if env.current_player == 1:
                 action_probs, _ = red_mcts.get_action_prob(env, temp=0, training=False)
@@ -91,12 +93,19 @@ class Arena:
             _, _, done, info = env.step(move)
             moves += 1
         
-        if not done and moves >= 150:
-            return 0
         return info["winner"]
 
-def load_model(path, device, action_dim=170):
+def load_model(path, device, action_dim=None):
     try:
+        ckpt = torch.load(path, map_location=device)
+        ckpt_action_dim = ckpt.get("action_dim", None)
+
+        if action_dim is None:
+            if ckpt_action_dim is not None:
+                action_dim = int(ckpt_action_dim)
+            else:
+                action_dim = ActionManager(device).action_dim
+
         model = AlphaZeroModel(action_dim, device)
         model.load(path)
         model.eval()

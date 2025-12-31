@@ -15,6 +15,10 @@ Provides pre-configured training setups for different scenarios:
 CONFIGS = {
     # Quick test for debugging (1-2 hours)
     'quick_test': {
+        'ENV_MAX_MOVES': 200,
+        'NO_PROGRESS_PLIES': 80,
+        'DRAW_PENALTY': -0.1,
+        'MCTS_DRAW_VALUE': -0.1,
         'NUM_ITERATIONS': 10,
         'GAMES_PER_ITERATION': 10,
         'TRAIN_EPOCHS': 5,
@@ -26,6 +30,10 @@ CONFIGS = {
     
     # Standard training (OPTIMIZED FOR RTX 2060 + CHECKERS)
     'standard': {
+        'ENV_MAX_MOVES': 200,
+        'NO_PROGRESS_PLIES': 80,
+        'DRAW_PENALTY': -0.1,
+        'MCTS_DRAW_VALUE': -0.1,
         'NUM_ITERATIONS': 100,
         'GAMES_PER_ITERATION': 12,
         'TRAIN_EPOCHS': 10,
@@ -40,6 +48,10 @@ CONFIGS = {
     
     # Production training (multiple days)
     'production': {
+        'ENV_MAX_MOVES': 200,
+        'NO_PROGRESS_PLIES': 80,
+        'DRAW_PENALTY': -0.1,
+        'MCTS_DRAW_VALUE': -0.1,
         'NUM_ITERATIONS': 500,
         'GAMES_PER_ITERATION': 100,
         'TRAIN_EPOCHS': 20,
@@ -51,6 +63,10 @@ CONFIGS = {
     
     # High-quality (for competition)
     'competition': {
+        'ENV_MAX_MOVES': 200,
+        'NO_PROGRESS_PLIES': 80,
+        'DRAW_PENALTY': -0.1,
+        'MCTS_DRAW_VALUE': -0.1,
         'NUM_ITERATIONS': 1000,
         'GAMES_PER_ITERATION': 200,
         'TRAIN_EPOCHS': 30,

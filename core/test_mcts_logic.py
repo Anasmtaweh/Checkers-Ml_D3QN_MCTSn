@@ -13,14 +13,15 @@ from core.board_encoder import CheckersBoardEncoder
 
 class MockModel:
     """A Fake Neural Network that targets a specific action."""
-    def __init__(self, target_action_id):
+    def __init__(self, target_action_id, action_dim):
         self.target_action_id = target_action_id
+        self.action_dim = action_dim
 
     def eval(self): pass
     
     def predict(self, state):
         # Create a fake policy: 100% probability on the LEGAL target action
-        policy = torch.zeros(170)
+        policy = torch.zeros(self.action_dim)
         policy[self.target_action_id] = 1.0
         
         # Fake Value: +0.9 (The player whose turn it is is WINNING)
@@ -46,7 +47,7 @@ def test_minus_sign_logic():
     print(f"  Targeting Legal Action ID: {target_action_id} (Move: {target_move})")
 
     # 2. Setup Mock Model to favor this specific legal move
-    model = MockModel(target_action_id)
+    model = MockModel(target_action_id, action_manager.action_dim)
     
     mcts = MCTS(model, action_manager, encoder, c_puct=1.0, num_simulations=10)
     
