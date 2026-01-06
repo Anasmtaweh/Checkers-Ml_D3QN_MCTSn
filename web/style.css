@@ -70,3 +70,8 @@ body {
 }
 .btn:hover { background: #533483; }
 .start-btn { background: #e94560; font-weight: bold; }
+
+.last-move {
+    background-color: rgba(255, 255, 0, 0.6) !important; /* Bright Yellow */
+    box-shadow: inset 0 0 10px rgba(255, 165, 0, 0.8); /* Orange Glow */
+}
