@@ -1,8 +1,12 @@
 import os
 import sys
+import time
+
+# Force CPU to avoid CUDA initialization errors on web server
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 import copy
 import threading
-import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,25 +14,44 @@ import numpy as np
 from flask import Flask, render_template, jsonify, request
 
 # --- PATH SETUP ---
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.abspath(os.path.join(CURRENT_DIR, '..'))
 
-from core.game import CheckersEnv
-from core.action_manager import ActionManager
-from core.board_encoder import CheckersBoardEncoder
-# Try importing D3QN, fallback if missing
+# Add Root (ML_Gen2)
+sys.path.append(ROOT_DIR)
+# Add MCTS Workspace
+sys.path.append(os.path.join(ROOT_DIR, 'mcts_workspace'))
+# Add D3QN Workspace
+sys.path.append(os.path.join(ROOT_DIR, 'd3qn_workspace'))
+
+from mcts_workspace.core.game import CheckersEnv
+from mcts_workspace.core.action_manager import ActionManager
+from mcts_workspace.core.board_encoder import CheckersBoardEncoder
+from mcts_workspace.training.alpha_zero.network import AlphaZeroModel
+import mcts_workspace.training.alpha_zero.mcts as mcts_module
+
+# --- OPTIONAL IMPORTS (with Pylance suppression) ---
+D3QNModel = None
 try:
-    from training.d3qn.model import D3QNModel
+    # Try importing assuming d3qn_workspace is in sys.path
+    from training.d3qn.model import D3QNModel # type: ignore
 except ImportError:
-    D3QNModel = None
-
-from training.alpha_zero.network import AlphaZeroModel
-import training.alpha_zero.mcts as mcts_module
+    try:
+        # Try importing via full namespace if defined differently
+        from d3qn_workspace.training.d3qn.model import D3QNModel # type: ignore
+    except ImportError:
+        print("⚠️ D3QN Model class not found. DQN agents will fail to load.")
+        D3QNModel = None
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=base_dir, static_folder=base_dir)
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# --- 1. CONFIGURATION: CPU + 1600 SIMS ---
+device = "cpu" 
 print(f"🔥 Web App running on: {device}")
+
+WEB_MCTS_SIMS = 1600
+print(f"⚡ MCTS Simulations set to: {WEB_MCTS_SIMS} (Full Strength)")
 
 # --- GLOBAL STATE ---
 env = CheckersEnv()
@@ -37,7 +60,6 @@ action_manager = ActionManager(device=device)
 encoder = CheckersBoardEncoder()
 agents_config = {"p1": "human", "p2": "human"}
 game_lock = threading.Lock()
-WEB_MCTS_SIMS = 1600
 last_move_info = None
 
 # --- LEGACY MODEL SUPPORT ---
@@ -45,7 +67,6 @@ class LegacyDuelingDQN(nn.Module):
     def __init__(self, action_dim, device):
         super(LegacyDuelingDQN, self).__init__()
         self.device = device
-        # Legacy models were trained on 5 channels
         self.conv1 = nn.Conv2d(5, 32, 3, padding=1)
         self.conv2 = nn.Conv2d(32, 64, 3, padding=1)
         self.conv3 = nn.Conv2d(64, 64, 3, padding=1)
@@ -74,17 +95,31 @@ class LegacyDuelingDQN(nn.Module):
 # --- HELPERS ---
 def load_available_models():
     root_dir = os.path.abspath(os.path.join(base_dir, '..'))
-    paths = [
-        os.path.join(root_dir, "checkpoints", "alphazero"), 
-        os.path.join(root_dir, "agents", "d3qn"),
-        os.path.join(root_dir, "models") 
-    ]
     model_files = {}
-    for p in paths:
-        if os.path.exists(p):
-            for f in os.listdir(p):
-                if f.endswith(".pth"): 
-                    model_files[f.replace(".pth", "")] = os.path.join(p, f)
+
+    # 1. AlphaZero Checkpoints
+    az_path = os.path.join(root_dir, "mcts_workspace", "checkpoints", "alphazero")
+    if os.path.exists(az_path):
+        az_files = []
+        for f in os.listdir(az_path):
+            if f.endswith(".pth") and "iter_" in f:
+                try:
+                    iter_num = int(f.split("iter_")[-1].replace(".pth", ""))
+                    if 200 <= iter_num <= 229:
+                        az_files.append((iter_num, f))
+                except ValueError:
+                    pass
+        
+        for _, f in sorted(az_files):
+            model_files[f.replace(".pth", "")] = os.path.join(az_path, f)
+
+    # 2. D3QN Checkpoints
+    d3qn_path = os.path.join(root_dir, "agents", "d3qn")
+    if os.path.exists(d3qn_path):
+        for f in os.listdir(d3qn_path):
+            if f.endswith(".pth"):
+                model_files[f.replace(".pth", "")] = os.path.join(d3qn_path, f)
+
     return model_files
 
 def load_agent(name, path):
@@ -137,7 +172,7 @@ def get_board_state():
         "current_player": env.current_player,
         "legal_moves": serialize_moves(env.get_legal_moves()),
         "game_over": bool(env.done),
-        "winner": int(env.winner),
+        "winner": int(env.winner) if env.winner is not None else None,
         "last_move": last_move_info
     }
 
@@ -171,6 +206,8 @@ def get_move():
     with game_lock:
         global last_move_info
         if env.done or not env.get_legal_moves(): 
+            if env.done:
+                print(f"🏁 GAME OVER. Winner: {env.winner}")
             return jsonify(get_board_state())
         
         cp = env.current_player
@@ -184,51 +221,51 @@ def get_move():
         selected_move = None
         
         if model:
-            # === ALPHAZERO LOGIC (BEAST MODE UPDATED) ===
+            # === ALPHAZERO LOGIC (GOD MODE: NO NOISE, MAX IQ) ===
             if isinstance(model, AlphaZeroModel):
                 mcts = mcts_module.MCTS(
                     model,
                     action_manager,
                     encoder,
                     c_puct=1.5,
-                    num_simulations=WEB_MCTS_SIMS,
+                    num_simulations=5000,  # Ensure this is 1600
                     device=device,
-
-                    # PURE AlphaZero inference (matches training)
-                    dirichlet_alpha=0.0,
-                    draw_value=0.0,
-                    search_draw_bias=0.0
+                    
+                    # 🛑 CRITICAL SETTINGS FOR DEMO 🛑
+                    dirichlet_epsilon=0.0, # MUST BE 0.0. No random noise.
+                    dirichlet_alpha=0.0,   # Disable Dirichlet entirely.
+                    draw_value=0.0,        # Play Pure Chess (Checkers).
+                    search_draw_bias=0.0   # No artificial bias.
                 )
+                
                 sim_env = copy.deepcopy(env)
-                probs, root = mcts.get_action_prob(sim_env, temp=0.0, training=False)
-                print(
-                    f"[AI {agent_name}] "
-                    f"V={root.get_greedy_value():.3f} | "
-                    f"N={root.visits}"
-                )
+                
+                start_time = time.time()
+                
+                # temp=0.0 -> Pick the move with highest visits (Deterministic)
+                probs, root = mcts.get_action_prob(sim_env, temp=0.0, training=False) 
+                
+                duration = time.time() - start_time
+                
+                print(f"[AI {agent_name}] V={root.get_greedy_value():.3f} | N={root.visits} | T={duration:.2f}s")
                 best_action = int(np.argmax(probs))
                 selected_move = mcts._get_move_from_action(best_action, legal_moves, player=cp)
 
-            # === DQN/LEGACY LOGIC (Needs 5-Channel Compat) ===
+            # === DQN LOGIC ===
             else:
-                # 1. Encode 6 channels (Standard Gen2)
                 state = encoder.encode(
                     env.board.get_state(), 
                     cp, 
                     force_move_from=env.force_capture_from
                 ).unsqueeze(0).to(device)
                 
-                # 2. COMPATIBILITY FIX: SLICE TO 5 CHANNELS IF NEEDED
-                # Check the first layer of the actual network being used
+                # Compat Fix: Slice 6ch -> 5ch if model requires it
                 network_to_check = model.online if hasattr(model, 'online') else model
-                
-                # If model starts with a Conv2d expecting 5 channels, strip the 6th
                 if hasattr(network_to_check, 'conv1'):
                      if getattr(network_to_check.conv1, 'in_channels', 0) == 5:
                          if state.shape[1] == 6:
                              state = state[:, :5, :, :]
                 
-                # 3. Run Inference
                 with torch.no_grad():
                     if hasattr(model, 'online'):
                         q_values = model.online(state)
@@ -237,16 +274,12 @@ def get_move():
                     else:
                         q_values = model(state)
 
-                # 4. Masking & Selection
                 mask = action_manager.make_legal_action_mask(legal_moves, player=cp).to(device)
                 q_values[0, ~mask] = -float('inf')
-                
                 action_id = int(torch.argmax(q_values).item())
                 
-                # Map back to move
                 move_pair = action_manager.get_move_from_id(action_id)
-                if cp == -1: 
-                    move_pair = action_manager.flip_move(move_pair)
+                if cp == -1: move_pair = action_manager.flip_move(move_pair)
                 
                 for m in legal_moves:
                     if action_manager._extract_start_landing(m) == move_pair:
@@ -257,15 +290,12 @@ def get_move():
             selected_move = random.choice(legal_moves)
         
         if selected_move is None:
-            print("⚠️ Agent failed to select move. Picking random.")
             import random
             selected_move = legal_moves[0]
 
-        if selected_move:
-            # selected_move is usually [[r1,c1], [r2,c2]]
-            start = [int(selected_move[0][0]), int(selected_move[0][1])]
-            end = [int(selected_move[1][0]), int(selected_move[1][1])]
-            last_move_info = {'start': start, 'end': end}
+        start = [int(selected_move[0][0]), int(selected_move[0][1])]
+        end = [int(selected_move[1][0]), int(selected_move[1][1])]
+        last_move_info = {'start': start, 'end': end}
 
         env.step(selected_move)
         return jsonify(get_board_state())
@@ -287,15 +317,17 @@ def human_move():
         start = tuple(move_data[0])
         landing = tuple(move_data[1])
 
-        for m in env.get_legal_moves():
-            m_start = tuple(m[0])
-            m_landing = tuple(m[1])
-            if m_start == start and m_landing == landing:
+        legal_moves = env.get_legal_moves()
+        for m in legal_moves:
+            if tuple(m[0]) == start and tuple(m[1]) == landing:
                 last_move_info = {'start': list(start), 'end': list(landing)}
                 env.step(m)
                 return jsonify(get_board_state())
 
+        print(f"⚠️ REJECTED MOVE: {start} -> {landing}")
+        print(f"   Must be one of: {[ (m[0], m[1]) for m in legal_moves ]}")
         return jsonify({"error": "Illegal Move"}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000, threaded=True)
+    # usage_reloader=False stops it from watching your files
+    app.run(debug=True, use_reloader=False, port=5000, threaded=True)

@@ -196,6 +196,37 @@ CONFIGS = {
         # --- SPEED ---
         'NO_PROGRESS_PLIES': 50,
         'ENV_MAX_MOVES': 110,
+    },
+    'era10_sprint': {
+        'description': 'FINAL SPRINT: 1600 Sims, High LR, Aggressive Bias',
+        
+        # --- MAX SPEED ---
+        'NUM_ITERATIONS': 500,
+        'GAMES_PER_ITERATION': 16, 
+        'BATCH_SIZE': 256,
+        'BUFFER_SIZE': 50000,
+        
+        # --- BRAIN ---
+        'MCTS_SIMULATIONS': 1600,  # Keep the High IQ
+        
+        # --- AGGRESSIVE LEARNING (The Fix) ---
+        'TRAIN_EPOCHS': 10,
+        'LR': 0.001,               # <--- INCREASED (Was 0.0002). Learn FAST.
+        
+        # --- LOGIC ---
+        'C_PUCT': 1.5,
+        'DIRICHLET_ALPHA': 0.8,    # Focused noise
+        'DIRICHLET_EPSILON': 0.25,
+        'TEMP_THRESHOLD': 30,
+        
+        # --- AGGRESSION ---
+        'DRAW_PENALTY': 0.0,
+        'MCTS_DRAW_VALUE': 0.0,
+        'MCTS_SEARCH_DRAW_BIAS': -0.15, # <--- RE-ADDED. Force it to fight.
+        
+        # --- SPEED ---
+        'NO_PROGRESS_PLIES': 50,
+        'ENV_MAX_MOVES': 110,
     }
 }
 

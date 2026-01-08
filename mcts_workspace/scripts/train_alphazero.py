@@ -33,8 +33,9 @@ from mcts_workspace.scripts.config_alphazero import CONFIGS
 # SETTINGS
 # ════════════════════════════════════════════════════════════════════
 
-CHECKPOINT_DIR = os.path.join(PROJECT_ROOT, "checkpoints", "alphazero")
-CSV_LOG_FILE = os.path.join(PROJECT_ROOT, "data", "training_logs", "alphazero_training.csv")
+# Workspace-specific paths
+CHECKPOINT_DIR = os.path.join(SCRIPT_DIR, "..", "checkpoints", "alphazero")
+CSV_LOG_FILE = os.path.join(SCRIPT_DIR, "..", "data", "training_logs", "alphazero_training.csv")
 BUFFER_PATH = os.path.join(CHECKPOINT_DIR, "latest_replay_buffer.pkl")
 
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)

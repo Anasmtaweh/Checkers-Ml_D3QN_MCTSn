@@ -1,106 +1,102 @@
-# ML_Gen2 - Checkers AI
+# Checkers AI: AlphaZero vs. D3QN
 
-Advanced checkers AI using D3QN (Deep Dueling Q-Network) and MCTS (Monte Carlo Tree Search) algorithms.
+**ML_Gen2** is a deep reinforcement learning project focused on mastering the game of Checkers (English Draughts). It implements and benchmarks two distinct architectures: **AlphaZero** (Model-Based) and **D3QN** (Model-Free).
 
-## Project Structure
+The project features a complete training pipeline, an automated tournament framework, and a web-based interface for visualizing the agents' thought processes.
 
-```
-ML_Gen2/
-├── agents/                          # Pre-trained AI agents
-│   └── d3qn/                        # D3QN model checkpoints
-│       ├── gen8_titan_LEGACY.pth    # Best performer (68.8%)
-│       ├── gen11_ep500_80vR_75vT_CHAMPION.pth
-│       └── ...
-├── core/                            # Game engine & core logic
-│   ├── game.py                      # CheckersEnv (game simulator)
-│   ├── board.py                     # Board state management
-│   ├── rules.py                     # Checkers rules validation
-│   ├── action_manager.py            # Action encoding/decoding
-│   ├── board_encoder.py             # State feature extraction
-│   └── move_parser.py               # Move notation parsing
-├── training/                        # Training pipelines
-│   ├── d3qn/                        # D3QN training code
-│   │   ├── model.py                 # D3QN neural network architecture
-│   │   ├── trainer.py               # Training loop & utilities
-│   │   ├── agent.py                 # D3QN agent for self-play
-│   │   ├── buffer.py                # Replay buffer implementation
-│   │   └── self_play.py             # Self-play training
-│   └── mcts/                        # MCTS search implementation
-│       ├── mcts_node.py             # MCTS tree node
-│       └── mcts_agent.py            # MCTS search agent
-├── evaluation/                      # Testing & benchmarking
-│   ├── play_vs_mcts.py              # MCTS vs D3QN gauntlet
-│   ├── tournament.py                # Round-robin tournaments
-│   ├── benchmark.py                 # Benchmark vs random agent
-│   └── evaluate_agent.py            # Agent evaluation
-├── scripts/                         # Entry points & utilities
-│   ├── train_d3qn.py                # Main training script
-│   ├── check_checkpoints.py         # Model inspection
-│   └── iron_tournament.py           # Swiss tournament system
-├── data/                            # Training data & results
-│   ├── training_logs/               # CSV training records
-│   ├── tournament_results/          # Tournament statistics
-│   └── archives/                    # Historical model checkpoints
-├── utils/                           # Utility functions
-│   └── plot_logs.py                 # Training visualization
-├── web/                             # Web interface
-│   ├── app.py                       # Flask server
-│   ├── index.html                   # Web UI
-│   ├── style.css                    # Styling
-│   └── game.js                      # Game visualization
-└── docs/                            # Documentation
-    └── DQN_PROJECT_SUMMARY.md       # Project overview
-```
+## 🌟 Key Features
 
-## Quick Start
+* **AlphaZero Implementation:** Custom "Tabula Rasa" learning engine using Monte Carlo Tree Search (MCTS) guided by a Dual-Head ResNet.
+* **D3QN Specialist:** A robust baseline agent using Dueling Double Deep Q-Networks with prioritized experience replay.
+* **Performance:** The AlphaZero agent (Gen 9) achieved a **0% Loss Rate** against the D3QN baseline ITER 220 --> 229 self-play.
+* **Web Interface:** A Flask-based UI allowing humans to play against the AI or watch "Brain vs Brain" matches with real-time probability visualization.
+* **Evaluation Suite:** Automated scripts to run head-to-head tournaments and generate win-rate plots.
 
-### Play Against MCTS
+---
+
+## 📊 Performance Results
+
+We benchmarked the **AlphaZero (Gen 9)** agent against our strongest **D3QN (Gen 7)** specialist.
+
+| Agent | Architecture | Training Method | Win Rate | Loss Rate |
+| --- | --- | --- | --- | --- |
+| **D3QN (Gen 7)** | Model-Free (Value Based) | Q-Learning | 0.0% | 17.0% |
+| **AlphaZero (Gen 9)** | Model-Based (MCTS) | Self-Play | **17.0%** | **0.0%** |
+
+*Note: The remaining games ended in Draws, which is typical for perfect play in Checkers.*
+
+---
+
+## 📂 Project Structure
+
+* **`mcts_workspace/`**: The Core AlphaZero Engine.
+    * `core/`: Game rules, bitboard operations, and move validation.
+    * `training/`: Neural network (PyTorch) and MCTS logic.
+* **`d3qn_workspace/`**: The Baseline D3QN Agent.
+* **`web/`**: Flask application for the browser interface.
+* **`evaluation_results/`**: Tournament logs and matplotlib graphs.
+
+---
+
+## 🛠️ Installation
+
+1. **Clone the repository:**
 ```bash
-python evaluation/play_vs_mcts.py
+git clone https://github.com/Anasmtaweh/Checkers-Ml_D3QN_MCTSn.git
+cd Checkers-Ml_D3QN_MCTSn
 ```
 
-### Run Tournament
+2. **Install Dependencies:**
+The project requires Python 3.8+ and PyTorch.
 ```bash
-python evaluation/tournament.py
+pip install torch numpy flask pandas matplotlib tqdm
 ```
 
-### Train New Agent
+*(Note: CUDA is recommended for training, but CPU works for inference.)*
+
+---
+
+## 🚀 Usage
+
+### 1. Play vs AI (Web Interface)
+
+Launch the interactive game board:
+
 ```bash
-python scripts/train_d3qn.py --episodes 1000 --checkpoint-freq 100
+python web/app.py
 ```
 
-## Model Performance
+Open your browser to `http://127.0.0.1:5000`. You can select "Human vs AlphaZero" or watch "AlphaZero vs D3QN".
 
-| Model | Type | Tournament | vs Random |
-|-------|------|-----------|-----------|
-| gen8_titan_LEGACY | D3QN Gen8 | **68.8%** | - |
-| gen11_CHAMPION | D3QN Gen11 | 62.5% | 80% |
-| gen12_elite_3500 | D3QN Gen12 | 54.2% | 77% |
-| MCTS (7s per move) | Tree Search | TBD | - |
+### 2. Train from Scratch
 
-## Key Improvements Applied
+To start a new training run for AlphaZero:
 
-### MCTS Enhancements
-- **Neural Network Evaluation**: Uses champion D3QN for position evaluation
-- **Move Ordering**: Prioritizes capture moves for efficient search
-- **Time Limit**: 7 seconds per move with adaptive depth
-- **Exploration**: UCB weight of 2.0 for aggressive play
-- **Rollout Depth**: Extended to 50 plies with advanced heuristics
+```bash
+python mcts_workspace/scripts/train_alphazero.py --config madras_local_resume
+```
 
-### D3QN Architecture
-- Dueling architecture: Value + Advantage streams
-- Convolutional feature extraction (5→32→64→64 channels)
-- Layer normalization for stability
-- Per-side head support for multi-player evaluation
+*Logs are saved to `mcts_workspace/data/training_logs/`.*
 
-## Files Modified for MCTS Strength
+### 3. Run Tournament
 
-- `training/mcts/mcts_node.py` - Advanced evaluation with neural integration
-- `training/mcts/mcts_agent.py` - Extended time budget and configuration
-- `evaluation/play_vs_mcts.py` - Model loader with neural evaluator
+To verify agent strength:
 
-## References
+```bash
+python mcts_workspace/scripts/evaluate_alphazero_vs_d3qn.py
+```
 
-- Dueling DQN: https://arxiv.org/abs/1511.06581
-- MCTS: https://en.wikipedia.org/wiki/Monte_Carlo_tree_search
-- Checkers Rules: https://www.fda.org.uk/
+---
+
+## 👥 Authors
+
+* **Anas Shawki Mtaweh**
+
+**Supervised by:** Dr. Ali Mohamad Ballout
+*Lebanese International University*
+
+---
+
+## 📄 License
+
+This project is open-source and available under the MIT License.

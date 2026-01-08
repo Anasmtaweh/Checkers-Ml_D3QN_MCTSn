@@ -30,9 +30,10 @@ EPSILON_DECAY = 5000
 BUFFER_CAPACITY = 50000
 MIN_BUFFER_SIZE = 2000
 
-CHECKPOINT_DIR = os.path.join(PROJECT_ROOT, "checkpoints_d3qn")
+CHECKPOINT_DIR = os.path.join(SCRIPT_DIR, "..", "checkpoints", "d3qn")
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-LOG_FILE = os.path.join(PROJECT_ROOT, "d3qn_training_log.csv")
+LOG_FILE = os.path.join(SCRIPT_DIR, "..", "data", "d3qn_training_log.csv")
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 def determine_game_phase(board_state):
     """Returns 'endgame' if pieces <= 6, else 'normal'"""
@@ -101,7 +102,7 @@ def main():
             # 2. Dynamic Epsilon for Endgame (Anti-Stagnation)
             current_epsilon = max(0.10, epsilon * 2) if phase == "endgame" else epsilon
 
-            encoded_state = encoder.encode(state, player=env.current_player)
+            encoded_state = encoder.encode(state, player=env.current_player, force_move_from=env.force_capture_from)
             
             # Select Action
             env_move, action_id, _ = select_agent_action(
@@ -124,7 +125,8 @@ def main():
                 if reward > 0.01: custom_reward += 0.2
                 elif reward > 0.001: custom_reward += 0.05
             
-            next_encoded = encoder.encode(next_state, player=env.current_player) # Note: player doesn't swap in step() immediately for encoding logic usually, ensure encoder handles player perspective
+            next_force_from = info.get("from", None)
+            next_encoded = encoder.encode(next_state, player=env.current_player, force_move_from=next_force_from)
             next_mask = action_manager.make_legal_action_mask(env.get_legal_moves() if not done else [])
             
             buffer.push(encoded_state, action_id, custom_reward, next_encoded, done, next_mask)

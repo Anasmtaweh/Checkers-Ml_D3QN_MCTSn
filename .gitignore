@@ -13,6 +13,14 @@ opponent_pool/
 *.pt
 *.pkl
 
+# --- Exceptions (Tracked Files) ---
+!d3qn_workspace/checkoints/gen7_specialist.pth
+!mcts_workspace/checkpoints/
+!mcts_workspace/checkpoints/alphazero/
+!mcts_workspace/checkpoints/alphazero/checkpoint_iter_223.pth
+!mcts_workspace/checkpoints/alphazero/checkpoint_iter_225.pth
+!mcts_workspace/checkpoints/alphazero/checkpoint_iter_227.pth
+
 # --- Logs & Visuals ---
 training_log.txt
 *.png

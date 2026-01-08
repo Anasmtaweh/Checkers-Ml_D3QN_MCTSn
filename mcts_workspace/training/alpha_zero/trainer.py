@@ -21,7 +21,13 @@ os.environ["RAY_DISABLE_METRICS_COLLECTION"] = "1"
 # We set num_gpus=0 to force Ray to put this on CPU cores.
 @ray.remote(num_gpus=0)
 class SelfPlayWorker:
-    def __init__(self, action_dim: int):
+    def __init__(self, action_dim: int, search_path: Optional[List[str]] = None):
+        import sys
+        if search_path:
+            for p in search_path:
+                if p not in sys.path:
+                    sys.path.append(p)
+
         import torch
         from mcts_workspace.core.action_manager import ActionManager
         from mcts_workspace.core.board_encoder import CheckersBoardEncoder
@@ -194,11 +200,17 @@ class AlphaZeroTrainer:
         
         if not ray.is_initialized():
             # Initializing Ray for local PC
-            ray.init(ignore_reinit_error=True, log_to_driver=False)
+            # Pass current sys.path to workers via PYTHONPATH so they can find 'mcts_workspace'
+            python_path = os.pathsep.join([p for p in sys.path if p])
+            ray.init(
+                ignore_reinit_error=True, 
+                log_to_driver=False,
+                runtime_env={"env_vars": {"PYTHONPATH": python_path}}
+            )
             
         print(f"  [Ray] Initializing {self.num_ray_workers} workers on CPU...")
         action_dim = self.action_manager.action_dim
-        self._ray_workers = [SelfPlayWorker.remote(action_dim=action_dim) for _ in range(self.num_ray_workers)]
+        self._ray_workers = [SelfPlayWorker.remote(action_dim=action_dim, search_path=sys.path) for _ in range(self.num_ray_workers)]
 
     def self_play(self, num_games: int, verbose: bool = True, iteration: int = 0) -> Dict[str, Any]:
         self._ensure_ray_workers()
