@@ -1,102 +1,176 @@
-# Checkers AI: AlphaZero vs. D3QN
+# Comparative Analysis of Reinforcement Learning Agents in Checkers
+## A Study of D3QN and AlphaZero-Inspired Architectures
 
-**ML_Gen2** is a deep reinforcement learning project focused on mastering the game of Checkers (English Draughts). It implements and benchmarks two distinct architectures: **AlphaZero** (Model-Based) and **D3QN** (Model-Free).
+**Authors:** Anas Shawki Mtaweh, Riad Al Eid
+**Institution:** Lebanese International University (LIU)
+**Supervisor:** Dr. Ali Mohamad Ballout
+**Date:** January 2026
 
-The project features a complete training pipeline, an automated tournament framework, and a web-based interface for visualizing the agents' thought processes.
+## Abstract
 
-## 🌟 Key Features
+This project investigates tabula rasa learning in the discrete, adversarial environment of Checkers (8×8). Two fundamentally different deep reinforcement learning paradigms are designed, trained, and evaluated:
 
-* **AlphaZero Implementation:** Custom "Tabula Rasa" learning engine using Monte Carlo Tree Search (MCTS) guided by a Dual-Head ResNet.
-* **D3QN Specialist:** A robust baseline agent using Dueling Double Deep Q-Networks with prioritized experience replay.
-* **Performance:** The AlphaZero agent (Gen 9) achieved a **0% Loss Rate** against the D3QN baseline ITER 220 --> 229 self-play.
-* **Web Interface:** A Flask-based UI allowing humans to play against the AI or watch "Brain vs Brain" matches with real-time probability visualization.
-* **Evaluation Suite:** Automated scripts to run head-to-head tournaments and generate win-rate plots.
+*   **D3QN (Dueling Double Deep Q-Network):** A value-based approach emphasizing state evaluation and action selection.
 
----
+*   **AlphaZero-Inspired Agent:** A model-based approach combining a dual-head neural network with Monte Carlo Tree Search (MCTS).
 
-## 📊 Performance Results
+Experimental results show that while the D3QN agent achieves strong baseline performance (96.2% win rate against a random agent), the AlphaZero-inspired agent demonstrates superior empirical performance, achieving a 0% loss rate in head-to-head evaluations against the best D3QN model under the tested conditions.
 
-We benchmarked the **AlphaZero (Gen 9)** agent against our strongest **D3QN (Gen 7)** specialist.
+## Project Structure
 
-| Agent | Architecture | Training Method | Win Rate | Loss Rate |
-| --- | --- | --- | --- | --- |
-| **D3QN (Gen 7)** | Model-Free (Value Based) | Q-Learning | 0.0% | 17.0% |
-| **AlphaZero (Gen 9)** | Model-Based (MCTS) | Self-Play | **17.0%** | **0.0%** |
+The repository is organized into independent workspaces corresponding to each architecture and interface.
 
-*Note: The remaining games ended in Draws, which is typical for perfect play in Checkers.*
+.
+├── d3qn_workspace/            # D3QN (Value-Based Learning)
+│   ├── core/                  # Game logic (Board, Rules, Move generation)
+│   ├── training/              # Network architecture & Replay Buffer
+│   └── checkpoints/           # Saved models (e.g., gen7_specialist.pth)
+│
+├── mcts_workspace/            # AlphaZero-Inspired (Search-Based Learning)
+│   ├── core/                  # State encoders & move parsers
+│   ├── training/              # MCTS logic, dual-head network, Ray workers
+│   ├── scripts/               # Training & evaluation scripts
+│   └── checkpoints/           # Model checkpoints (Iter 100–229, Era 9)
+│
+├── web/                       # Web-based Checkers Interface
+│   ├── app.py                 # Flask backend
+│   └── static/                # Frontend (JS/CSS)
+│
+└── evaluation_results/        # CSV files from head-to-head evaluations
 
----
+## Methodology & Architectures
+### 1. D3QN (Value-Based Learning)
 
-## 📂 Project Structure
+The D3QN agent employs a Dueling Double DQN architecture to decouple state value estimation from action advantages.
 
-* **`mcts_workspace/`**: The Core AlphaZero Engine.
-    * `core/`: Game rules, bitboard operations, and move validation.
-    * `training/`: Neural network (PyTorch) and MCTS logic.
-* **`d3qn_workspace/`**: The Baseline D3QN Agent.
-* **`web/`**: Flask application for the browser interface.
-* **`evaluation_results/`**: Tournament logs and matplotlib graphs.
+**Input Representation:**
+5-channel spatial encoding (own pieces, opponent pieces, kings, turn context)
 
----
+**Best Model:**
+gen7_specialist.pth
 
-## 🛠️ Installation
+**Training Strategy:**
+Iterative reward refinement with terminal-focused reward shaping to prevent reward hacking.
 
-1. **Clone the repository:**
+**Key Result:**
+96.2% win rate against a random agent at ~18,500 training episodes.
+
+### 2. AlphaZero-Inspired Agent (Policy + Search)
+
+This agent follows the AlphaGo Zero paradigm, combining MCTS with a dual-head neural network predicting policy and value.
+
+**Input Representation:**
+6-channel encoding (includes forced-move context)
+
+**Best Model:**
+Checkpoints iter_200+ (Era 9)
+
+**Search Configuration:**
+1600 MCTS simulations per move
+
+**Key Result:**
+0% loss rate against the best D3QN agent in direct evaluations.
+
+Note: This implementation is AlphaZero-inspired, incorporating domain-specific adaptations and custom encodings.
+
+## Results & Benchmarks
+
+Final evaluation compares the strongest D3QN model with the strongest AlphaZero-inspired agent.
+
+| Metric | D3QN (Gen 7) | AlphaZero-Inspired (Era 9) |
+| :--- | :--- | :--- |
+| Learning Paradigm | Value-Based | Policy + Search (MCTS) |
+| Forward Simulations | 0 | 1600 per move |
+| Long-Horizon Planning | Limited (>4 moves) | Significantly improved (8+ moves) |
+| Win Rate vs Random | 96.2% | 100% |
+| Head-to-Head vs D3QN | — | No losses observed |
+
+Figure 1: plot_200_229.png (included in repository) shows the AlphaZero-inspired agent’s stability phase where loss rate converges to 0.0.
+
+## Usage
+### 1. Installation
+
+Requirements:
+
+*   Python 3.10+
+
+*   CUDA support recommended (for AlphaZero-inspired training)
+
 ```bash
-git clone https://github.com/Anasmtaweh/Checkers-Ml_D3QN_MCTSn.git
-cd Checkers-Ml_D3QN_MCTSn
+pip install torch numpy flask ray pandas matplotlib
 ```
 
-2. **Install Dependencies:**
-The project requires Python 3.8+ and PyTorch.
-```bash
-pip install torch numpy flask pandas matplotlib tqdm
-```
+### 2. Running the Web Interface
 
-*(Note: CUDA is recommended for training, but CPU works for inference.)*
-
----
-
-## 🚀 Usage
-
-### 1. Play vs AI (Web Interface)
-
-Launch the interactive game board:
+To play against trained agents or observe automated matches:
 
 ```bash
 python web/app.py
 ```
 
-Open your browser to `http://127.0.0.1:5000`. You can select "Human vs AlphaZero" or watch "AlphaZero vs D3QN".
 
-### 2. Train from Scratch
+Open http://127.0.0.1:5000 in a browser.
 
-To start a new training run for AlphaZero:
+Select Player 1 and Player 2 models (e.g., gen7_specialist vs checkpoint_iter_229) and start the game.
 
-```bash
-python mcts_workspace/scripts/train_alphazero.py --config madras_local_resume
-```
+### 3. Training the AlphaZero-Inspired Agent
 
-*Logs are saved to `mcts_workspace/data/training_logs/`.*
-
-### 3. Run Tournament
-
-To verify agent strength:
+To resume or start training using predefined configurations:
 
 ```bash
-python mcts_workspace/scripts/evaluate_alphazero_vs_d3qn.py
+cd mcts_workspace
+python scripts/train_alphazero.py --config era9_precision --workers 4
 ```
 
----
+### 4. Model Evaluation
 
-## 👥 Authors
+To run a headless tournament between agents:
 
-* **Anas Shawki Mtaweh**
+```bash
+cd mcts_workspace
+python scripts/evaluate_alphazero_vs_d3qn.py
+```
 
-**Supervised by:** Dr. Ali Mohamad Ballout
-*Lebanese International University*
+## Hyperparameters
+### D3QN (Gen 7)
 
----
+*   **Optimizer:** Adam (learning rate = 1×10⁻⁴)
 
-## 📄 License
+*   **Loss Function:** Huber Loss (Smooth L1)
 
-This project is open-source and available under the MIT License.
+*   **Exploration:** Linear ε-decay (1.0 → 0.05)
+
+*   **Rewards:**
+
+    *   Win: +1.0
+
+    *   Loss: −1.0
+
+    *   Step penalty: −0.001
+
+### AlphaZero-Inspired (Era 9)
+
+*   **MCTS Simulations:** 1600
+
+*   **Cₚᵤ𝒸ₜ:** 1.5
+
+*   **Dirichlet Noise:** ε = 0.15, α = 0.5
+
+*   **Training Batch Size:** 256
+
+*   **Replay Buffer:** 50,000 transitions (FIFO)
+
+## Credits
+
+This project was submitted to the School of Arts & Sciences, Lebanese International University.
+
+**Developers:**
+Anas Shawki Mtaweh
+Riad Al Eid
+
+**Supervisor:**
+Dr. Ali Mohamad Ballout
+
+**Core Libraries:** PyTorch, NumPy, Ray
+
+© 2026 — All Rights Reserved.
