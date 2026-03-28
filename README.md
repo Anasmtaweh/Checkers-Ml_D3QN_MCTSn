@@ -1,7 +1,15 @@
-# Checkers RL Oracle
-The tabula rasa, dual-architecture reinforcement learning engine for Checkers.
+<div align="center">
 
-License: MIT | Python 3.10+ | Powered by PyTorch & Flask
+# Checkers RL Oracle
+
+**The tabula rasa, dual-architecture reinforcement learning engine for Checkers.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
+[![Powered by PyTorch](https://img.shields.io/badge/Powered%20by-PyTorch-red)](https://pytorch.org)
+[![Powered by Flask](https://img.shields.io/badge/Powered%20by-Flask-green)](https://flask.palletsprojects.com/)
+
+</div>
 
 ---
 
@@ -99,6 +107,8 @@ python scripts/evaluate_alphazero_vs_d3qn.py
 MIT — see [LICENSE](LICENSE) for details.
 
 ## Author
-Built by Anas Shawki Mtaweh
 
-GitHub: Anasmtaweh
+Built by [Anas Shawki Mtaweh](https://github.com/Anasmtaweh) 
+
+- GitHub: [Anasmtaweh](https://github.com/Anasmtaweh)
+- LinkedIn: [linkedin.com/in/anas-mtaweh-a02806218](https://www.linkedin.com/in/anas-mtaweh-a02806218)
