@@ -1,6 +1,6 @@
 <div align="center">
 
-# Checkers RL Oracle
+# Checkers RL
 
 **The tabula rasa, dual-architecture reinforcement learning engine for Checkers.**
 
@@ -13,7 +13,7 @@
 
 ---
 
-## What is the Checkers RL Oracle?
+## What is Checkers RL?
 This project is a deep investigation into *tabula rasa* learning in the discrete, adversarial environment of Checkers (8×8). Two fundamentally different deep reinforcement learning paradigms are designed, trained, and evaluated head-to-head: a value-based D3QN agent and a search-based AlphaZero-inspired model.
 
 No human game logs. No opening books. Just pure reinforcement learning.
