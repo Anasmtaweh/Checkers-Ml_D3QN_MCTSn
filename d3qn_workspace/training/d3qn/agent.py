@@ -1,11 +1,11 @@
-import torch
 import random
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, Optional, Tuple
 
-from training.d3qn.model import D3QNModel
-from core.board_encoder import CheckersBoardEncoder
+import torch
 from core.action_manager import ActionManager
+from core.board_encoder import CheckersBoardEncoder
 from core.move_parser import parse_legal_moves
+from training.d3qn.model import D3QNModel
 
 Move = Tuple[Tuple[int, int], Tuple[int, int]]
 
@@ -22,8 +22,7 @@ class D3QNAgent:
         self.action_manager = ActionManager(device=self.device)
 
         self.model = D3QNModel(
-            action_dim=self.action_manager.action_dim,
-            device=self.device
+            action_dim=self.action_manager.action_dim, device=self.device
         )
 
     def load_weights(self, path: str):
@@ -55,7 +54,14 @@ class D3QNAgent:
     # ------------------------------------------------------
     # SELECT ACTION
     # ------------------------------------------------------
-    def select_action(self, board, player, legal_moves, epsilon: float = 0.0, info: Optional[Dict] = None) -> Tuple[Optional[Any], Optional[int]]:
+    def select_action(
+        self,
+        board,
+        player,
+        legal_moves,
+        epsilon: float = 0.0,
+        info: Optional[Dict] = None,
+    ) -> Tuple[Optional[Any], Optional[int]]:
         """
         Selects an action using an epsilon-greedy strategy.
         Correctly handles Canonical Perspective (flipping) for Player 2.
@@ -79,9 +85,11 @@ class D3QNAgent:
         # If Player 2, the network sees a flipped board (P1 perspective).
         # So we must flip the legal moves to match what the network expects to output.
         if player == -1:
-            canonical_moves = [self.action_manager.flip_move(m) for m in normalized_moves]
+            canonical_moves = [
+                self.action_manager.flip_move(m) for m in normalized_moves
+            ]
             mask = self.action_manager.make_legal_action_mask(canonical_moves)
-            
+
             # Map Canonical ID -> Absolute ID
             canonical_to_absolute = {}
             for i, cm in enumerate(canonical_moves):
@@ -114,7 +122,9 @@ class D3QNAgent:
 
                 # Defensive check for unstable model output
                 if torch.isnan(q_values).any() or torch.isinf(q_values).any():
-                    print("Warning: NaN or Inf detected in Q-values during inference. Falling back to random action.")
+                    print(
+                        "Warning: NaN or Inf detected in Q-values during inference. Falling back to random action."
+                    )
                     absolute_id = random.choice(list(mapping.keys()))
                     return mapping[absolute_id], absolute_id
                 else:
@@ -132,7 +142,7 @@ class D3QNAgent:
 
         if absolute_id is not None and absolute_id in mapping:
             return mapping[absolute_id], absolute_id
-            
+
         # Fallback
         absolute_id = random.choice(list(mapping.keys()))
         return mapping[absolute_id], absolute_id

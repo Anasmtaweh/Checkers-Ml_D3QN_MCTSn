@@ -1,3 +1,8 @@
+"""
+Checkers Board Logic module.
+
+Provides the primitive internal representation of an 8x8 checkers board.
+"""
 import numpy as np
 
 

@@ -1,6 +1,8 @@
+from typing import Tuple
+
 import numpy as np
 import torch
-from typing import Tuple
+
 
 class ReplayBuffer:
     """
@@ -68,7 +70,7 @@ class ReplayBuffer:
         reward: float,
         next_state: torch.Tensor,
         done: bool,
-        next_legal_mask: torch.Tensor
+        next_legal_mask: torch.Tensor,
     ):
         """
         Add a transition to the replay buffer.
@@ -111,7 +113,7 @@ class ReplayBuffer:
         torch.Tensor,  # rewards
         torch.Tensor,  # next_states
         torch.Tensor,  # dones
-        torch.Tensor   # next_legal_masks
+        torch.Tensor,  # next_legal_masks
     ]:
         """
         Sample a random batch of transitions.
@@ -140,7 +142,9 @@ class ReplayBuffer:
         actions = torch.from_numpy(batch_actions).to(self.device)
         rewards = torch.from_numpy(batch_rewards).to(self.device)
         next_states = torch.from_numpy(batch_next_states).to(self.device)
-        dones = torch.from_numpy(batch_dones).to(self.device).float()  # Convert bool to float
+        dones = (
+            torch.from_numpy(batch_dones).to(self.device).float()
+        )  # Convert bool to float
         masks = torch.from_numpy(batch_masks).to(self.device)
 
         return states, actions, rewards, next_states, dones, masks
@@ -163,8 +167,14 @@ class ReplayBuffer:
         dones_bytes = self.capacity * 1 * 1  # bool
         masks_bytes = self.capacity * self.action_dim * 1  # bool
 
-        total_bytes = (states_bytes + next_states_bytes + actions_bytes + 
-                      rewards_bytes + dones_bytes + masks_bytes)
+        total_bytes = (
+            states_bytes
+            + next_states_bytes
+            + actions_bytes
+            + rewards_bytes
+            + dones_bytes
+            + masks_bytes
+        )
 
         return total_bytes / (1024 * 1024)
 
@@ -183,14 +193,14 @@ class ReplayBuffer:
         """
         np.savez_compressed(
             path,
-            states=self.states[:self.size],
-            next_states=self.next_states[:self.size],
-            actions=self.actions[:self.size],
-            rewards=self.rewards[:self.size],
-            dones=self.dones[:self.size],
-            legal_masks=self.legal_masks[:self.size],
+            states=self.states[: self.size],
+            next_states=self.next_states[: self.size],
+            actions=self.actions[: self.size],
+            rewards=self.rewards[: self.size],
+            dones=self.dones[: self.size],
+            legal_masks=self.legal_masks[: self.size],
             ptr=self.ptr,
-            size=self.size
+            size=self.size,
         )
 
     def load(self, path: str):
@@ -202,17 +212,17 @@ class ReplayBuffer:
         """
         data = np.load(path)
 
-        size = int(data['size'])
-        self.ptr = int(data['ptr'])
+        size = int(data["size"])
+        self.ptr = int(data["ptr"])
         self.size = size
 
         # Load data into pre-allocated arrays
-        self.states[:size] = data['states']
-        self.next_states[:size] = data['next_states']
-        self.actions[:size] = data['actions']
-        self.rewards[:size] = data['rewards']
-        self.dones[:size] = data['dones']
-        self.legal_masks[:size] = data['legal_masks']
+        self.states[:size] = data["states"]
+        self.next_states[:size] = data["next_states"]
+        self.actions[:size] = data["actions"]
+        self.rewards[:size] = data["rewards"]
+        self.dones[:size] = data["dones"]
+        self.legal_masks[:size] = data["legal_masks"]
 
         print(f"ReplayBuffer loaded: {size:,} transitions from {path}")
 
@@ -222,9 +232,9 @@ class ReplayBuffer:
 # ================================================================
 
 if __name__ == "__main__":
-    print("="*70)
+    print("=" * 70)
     print("REPLAY BUFFER TEST")
-    print("="*70)
+    print("=" * 70)
 
     # Test configuration
     capacity = 10000
@@ -238,16 +248,16 @@ if __name__ == "__main__":
     print(f"Buffer size: {len(buffer)}")
 
     # Test adding transitions
-    print("\n" + "-"*70)
+    print("\n" + "-" * 70)
     print("Test 1: Adding Transitions")
-    print("-"*70)
+    print("-" * 70)
 
     for i in range(5):
         state = torch.randn(5, 8, 8)
         action = i % action_dim
         reward = float(i)
         next_state = torch.randn(5, 8, 8)
-        done = (i == 4)
+        done = i == 4
         mask = torch.zeros(action_dim, dtype=torch.bool)
         mask[i] = True
 
@@ -257,9 +267,9 @@ if __name__ == "__main__":
     print(f"Buffer size: {len(buffer)}")
 
     # Test sampling
-    print("\n" + "-"*70)
+    print("\n" + "-" * 70)
     print("Test 2: Sampling Batch")
-    print("-"*70)
+    print("-" * 70)
 
     batch_size = 3
     states, actions, rewards, next_states, dones, masks = buffer.sample(batch_size)
@@ -273,9 +283,9 @@ if __name__ == "__main__":
     print(f"Masks shape: {masks.shape}")
 
     # Test circular buffer behavior
-    print("\n" + "-"*70)
+    print("\n" + "-" * 70)
     print("Test 3: Circular Buffer (Overwrite)")
-    print("-"*70)
+    print("-" * 70)
 
     small_buffer = ReplayBuffer(capacity=3, action_dim=action_dim, device=device)
 
@@ -288,19 +298,21 @@ if __name__ == "__main__":
         mask = torch.zeros(action_dim, dtype=torch.bool)
 
         small_buffer.push(state, action, reward, next_state, done, mask)
-        print(f"  Added transition {i}, buffer size: {len(small_buffer)}, ptr: {small_buffer.ptr}")
+        print(
+            f"  Added transition {i}, buffer size: {len(small_buffer)}, ptr: {small_buffer.ptr}"
+        )
 
     print(f"\nFinal buffer size: {len(small_buffer)} (max capacity: 3)")
     print(f"Final pointer: {small_buffer.ptr}")
 
     # Test is_ready
-    print("\n" + "-"*70)
+    print("\n" + "-" * 70)
     print("Test 4: Ready Check")
-    print("-"*70)
+    print("-" * 70)
 
     print(f"Buffer with 5 transitions ready for batch_size=3? {buffer.is_ready(3)}")
     print(f"Buffer with 5 transitions ready for batch_size=10? {buffer.is_ready(10)}")
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("✓ ALL TESTS PASSED")
-    print("="*70)
+    print("=" * 70)

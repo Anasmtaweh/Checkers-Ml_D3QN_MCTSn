@@ -1,11 +1,12 @@
-import pickle
 import os
+import pickle
 from collections import deque
 
 # CONFIGURATION FOR YOUR PLAN
 BUFFER_PATH = "checkpoints/alphazero/latest_replay_buffer.pkl"
-KEEP_COUNT = 20000     # Keeps exactly Iter 142 -> 155 (The Awakening Era)
-NEW_MAX_LEN = 50000    # Allows buffer to grow 2.5x larger before forgetting again
+KEEP_COUNT = 20000  # Keeps exactly Iter 142 -> 155 (The Awakening Era)
+NEW_MAX_LEN = 50000  # Allows buffer to grow 2.5x larger before forgetting again
+
 
 def surgical_trim():
     if not os.path.exists(BUFFER_PATH):
@@ -22,9 +23,9 @@ def surgical_trim():
     # THE SURGERY
     print(f"🔪 Cutting the 'Dark Ages' (Iter 1-141)...")
     print(f"   Keeping latest {KEEP_COUNT} samples (Iter 142-155)...")
-    
+
     new_data = list(buffer)[-KEEP_COUNT:]
-    
+
     # Create new deque with your requested 50,000 limit
     new_buffer = deque(new_data, maxlen=NEW_MAX_LEN)
 
@@ -34,8 +35,9 @@ def surgical_trim():
     print(f"💾 Saving optimized buffer...")
     with open(BUFFER_PATH, "wb") as f:
         pickle.dump(new_buffer, f)
-    
+
     print("✅ Surgery Complete.")
+
 
 if __name__ == "__main__":
     surgical_trim()

@@ -46,14 +46,21 @@ class CheckersRules:
                 mid_r, mid_c = r + dr, c + dc
                 land_r, land_c = r + 2 * dr, c + 2 * dc
 
-                if not (0 <= mid_r < 8 and 0 <= mid_c < 8 and 0 <= land_r < 8 and 0 <= land_c < 8):
+                if not (
+                    0 <= mid_r < 8
+                    and 0 <= mid_c < 8
+                    and 0 <= land_r < 8
+                    and 0 <= land_c < 8
+                ):
                     continue
 
-                if CheckersRules._is_opponent(board[mid_r, mid_c], player) and board[land_r, land_c] == 0:
+                if (
+                    CheckersRules._is_opponent(board[mid_r, mid_c], player)
+                    and board[land_r, land_c] == 0
+                ):
                     steps.append(((r, c), (land_r, land_c), (mid_r, mid_c)))
 
         return steps
-
 
     @staticmethod
     def _capture_sequences_from(board, r, c, player):
@@ -68,17 +75,27 @@ class CheckersRules:
                 mid_r, mid_c = r + dr, c + dc
                 land_r, land_c = r + 2 * dr, c + 2 * dc
 
-                if not (0 <= mid_r < 8 and 0 <= mid_c < 8 and 0 <= land_r < 8 and 0 <= land_c < 8):
+                if not (
+                    0 <= mid_r < 8
+                    and 0 <= mid_c < 8
+                    and 0 <= land_r < 8
+                    and 0 <= land_c < 8
+                ):
                     continue
 
-                if CheckersRules._is_opponent(board[mid_r, mid_c], player) and board[land_r, land_c] == 0:
+                if (
+                    CheckersRules._is_opponent(board[mid_r, mid_c], player)
+                    and board[land_r, land_c] == 0
+                ):
                     # simulate jump
                     new_board = board.copy()
                     new_board[land_r, land_c] = new_board[r, c]
                     new_board[r, c] = 0
                     new_board[mid_r, mid_c] = 0
 
-                    subsequent = CheckersRules._capture_sequences_from(new_board, land_r, land_c, player)
+                    subsequent = CheckersRules._capture_sequences_from(
+                        new_board, land_r, land_c, player
+                    )
                     step = ((r, c), (land_r, land_c), (mid_r, mid_c))
 
                     if subsequent:

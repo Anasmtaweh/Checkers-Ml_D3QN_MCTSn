@@ -1,6 +1,7 @@
-import pandas as pd
-import matplotlib.pyplot as plt
 import io
+
+import matplotlib.pyplot as plt
+import pandas as pd
 
 # 1. YOUR RAW DATA
 csv_data = """iteration,az_wins,d3qn_wins,draws,win_rate,draw_rate,loss_rate,p1_wins,p2_wins
@@ -42,40 +43,62 @@ df = pd.read_csv(io.StringIO(csv_data))
 # 3. SMOOTHING (Essential for this data)
 # Window 3 averages the last 3 points to stop the lines from looking like a barcode
 window = 3
-df['win_smooth'] = df['win_rate'].rolling(window=window, min_periods=1).mean()
-df['draw_smooth'] = df['draw_rate'].rolling(window=window, min_periods=1).mean()
-df['loss_smooth'] = df['loss_rate'].rolling(window=window, min_periods=1).mean()
+df["win_smooth"] = df["win_rate"].rolling(window=window, min_periods=1).mean()
+df["draw_smooth"] = df["draw_rate"].rolling(window=window, min_periods=1).mean()
+df["loss_smooth"] = df["loss_rate"].rolling(window=window, min_periods=1).mean()
 
 # 4. PLOTTING
 plt.figure(figsize=(12, 6), dpi=150)
 
 # Colors
-GREEN = '#2ca02c'
-RED = '#d62728'
-GRAY = '#7f7f7f'
+GREEN = "#2ca02c"
+RED = "#d62728"
+GRAY = "#7f7f7f"
 
 # --- Plot Wins ---
-plt.plot(df['iteration'], df['win_smooth'], color=GREEN, linewidth=2.5, label='AlphaZero Win Rate')
-plt.fill_between(df['iteration'], 0, df['win_smooth'], color=GREEN, alpha=0.1) # Green Glow
-plt.scatter(df['iteration'], df['win_rate'], color=GREEN, alpha=0.2, s=20) # Raw dots
+plt.plot(
+    df["iteration"],
+    df["win_smooth"],
+    color=GREEN,
+    linewidth=2.5,
+    label="AlphaZero Win Rate",
+)
+plt.fill_between(
+    df["iteration"], 0, df["win_smooth"], color=GREEN, alpha=0.1
+)  # Green Glow
+plt.scatter(df["iteration"], df["win_rate"], color=GREEN, alpha=0.2, s=20)  # Raw dots
 
 # --- Plot Draws ---
-plt.plot(df['iteration'], df['draw_smooth'], color=GRAY, linewidth=2, linestyle='--', label='Draw Rate')
+plt.plot(
+    df["iteration"],
+    df["draw_smooth"],
+    color=GRAY,
+    linewidth=2,
+    linestyle="--",
+    label="Draw Rate",
+)
 
 # --- Plot Losses ---
-plt.plot(df['iteration'], df['loss_smooth'], color=RED, linewidth=2, linestyle=':', label='D3QN Win Rate')
-plt.scatter(df['iteration'], df['loss_rate'], color=RED, alpha=0.2, s=20) # Raw dots
+plt.plot(
+    df["iteration"],
+    df["loss_smooth"],
+    color=RED,
+    linewidth=2,
+    linestyle=":",
+    label="D3QN Win Rate",
+)
+plt.scatter(df["iteration"], df["loss_rate"], color=RED, alpha=0.2, s=20)  # Raw dots
 
 # Formatting
-plt.title("AlphaZero Performance: Iterations 200-229", fontsize=14, fontweight='bold')
+plt.title("AlphaZero Performance: Iterations 200-229", fontsize=14, fontweight="bold")
 plt.xlabel("Iteration", fontsize=12)
 plt.ylabel("Rate", fontsize=12)
 plt.ylim(-0.05, 1.05)
 plt.grid(True, alpha=0.3)
-plt.legend(loc='upper right')
+plt.legend(loc="upper right")
 
 # Y-Axis Percentages
-plt.gca().set_yticklabels(['{:.0f}%'.format(x*100) for x in plt.gca().get_yticks()])
+plt.gca().set_yticklabels(["{:.0f}%".format(x * 100) for x in plt.gca().get_yticks()])
 
 # Save
 output_path = "plot_200_229.png"

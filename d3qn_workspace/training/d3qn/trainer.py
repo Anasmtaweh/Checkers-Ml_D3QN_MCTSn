@@ -1,7 +1,5 @@
 import torch
-import torch.optim as optim
 import torch.nn.functional as F
-import numpy as np
 
 
 class D3QNTrainer:
@@ -25,7 +23,7 @@ class D3QNTrainer:
         gamma=0.99,
         gradient_clip=1.0,
         loss_type="huber",
-        tau=0.001
+        tau=0.001,
     ):
         self.env = env
         self.action_manager = action_manager
@@ -53,7 +51,9 @@ class D3QNTrainer:
             loss: Scalar loss value
         """
         # 1. Sample
-        state, action, reward, next_state, done, next_legal_mask = self.buffer.sample(batch_size)
+        state, action, reward, next_state, done, next_legal_mask = self.buffer.sample(
+            batch_size
+        )
 
         # 2. Compute Current Q (using player_side head)
         q_values = self.model.online(state, player_side=player_side)
@@ -63,7 +63,7 @@ class D3QNTrainer:
         with torch.no_grad():
             # Online network selects action
             next_q_online = self.model.online(next_state, player_side=player_side)
-            next_q_online[~next_legal_mask] = -float('inf')
+            next_q_online[~next_legal_mask] = -float("inf")
             next_action = next_q_online.argmax(1).unsqueeze(1)
 
             # Target network evaluates action
@@ -79,12 +79,18 @@ class D3QNTrainer:
         # 5. Optimize
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.online.parameters(), self.gradient_clip)
+        torch.nn.utils.clip_grad_norm_(
+            self.model.online.parameters(), self.gradient_clip
+        )
         self.optimizer.step()
 
         return loss.item()
 
     def update_target_network(self):
         """Soft update target network toward online network."""
-        for target_param, online_param in zip(self.model.target.parameters(), self.model.online.parameters()):
-            target_param.data.copy_(self.tau * online_param.data + (1.0 - self.tau) * target_param.data)
+        for target_param, online_param in zip(
+            self.model.target.parameters(), self.model.online.parameters()
+        ):
+            target_param.data.copy_(
+                self.tau * online_param.data + (1.0 - self.tau) * target_param.data
+            )

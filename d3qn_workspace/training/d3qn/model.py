@@ -1,7 +1,9 @@
+from typing import Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Union
+
 
 class DuelingDQN(nn.Module):
     def __init__(self, action_dim: int, device: Union[str, torch.device] = "cpu"):
@@ -15,37 +17,29 @@ class DuelingDQN(nn.Module):
         # Channel 4: Tempo
         # Channel 5: Forced Move Mask (Context)
         self.conv1 = nn.Conv2d(in_channels=6, out_channels=32, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(
+            in_channels=32, out_channels=64, kernel_size=3, padding=1
+        )
+        self.conv3 = nn.Conv2d(
+            in_channels=64, out_channels=64, kernel_size=3, padding=1
+        )
 
         self.flatten_size = 64 * 8 * 8
         self.fc_norm = nn.LayerNorm(self.flatten_size)
 
         # Shared fully connected layer
-        self.shared_fc = nn.Linear(self.flatten_size, 512) 
+        self.shared_fc = nn.Linear(self.flatten_size, 512)
 
         # P1 HEAD (Red)
-        self.p1_value = nn.Sequential(
-            nn.Linear(512, 128),
-            nn.ReLU(),
-            nn.Linear(128, 1)
-        )
+        self.p1_value = nn.Sequential(nn.Linear(512, 128), nn.ReLU(), nn.Linear(128, 1))
         self.p1_advantage = nn.Sequential(
-            nn.Linear(512, 128),
-            nn.ReLU(),
-            nn.Linear(128, action_dim)
+            nn.Linear(512, 128), nn.ReLU(), nn.Linear(128, action_dim)
         )
 
         # P2 HEAD (Black)
-        self.p2_value = nn.Sequential(
-            nn.Linear(512, 128),
-            nn.ReLU(),
-            nn.Linear(128, 1)
-        )
+        self.p2_value = nn.Sequential(nn.Linear(512, 128), nn.ReLU(), nn.Linear(128, 1))
         self.p2_advantage = nn.Sequential(
-            nn.Linear(512, 128),
-            nn.ReLU(),
-            nn.Linear(128, action_dim)
+            nn.Linear(512, 128), nn.ReLU(), nn.Linear(128, action_dim)
         )
 
         self._init_weights()
@@ -54,7 +48,7 @@ class DuelingDQN(nn.Module):
     def _init_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
             elif isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
                 if m.bias is not None:
@@ -63,7 +57,7 @@ class DuelingDQN(nn.Module):
     def forward(self, x: torch.Tensor, player_side: int = 1) -> torch.Tensor:
         if x.dim() == 3:
             x = x.unsqueeze(0)
-        
+
         x = x.to(self.device)
 
         x = F.relu(self.conv1(x))
@@ -87,6 +81,7 @@ class DuelingDQN(nn.Module):
     def get_q_values(self, state: torch.Tensor, player_side: int = 1) -> torch.Tensor:
         return self.forward(state, player_side)
 
+
 class D3QNModel:
     def __init__(self, action_dim: int, device: Union[str, torch.device] = "cpu"):
         self.action_dim = action_dim
@@ -102,14 +97,14 @@ class D3QNModel:
     def get_q_values(self, state, player_side=1, use_target=False):
         net = self.target if use_target else self.online
         return net.get_q_values(state, player_side)
-    
+
     def train(self):
         self.online.train()
-    
+
     def eval(self):
         self.online.eval()
         self.target.eval()
-        
+
     def to(self, device):
         self.device = device
         self.online.to(device)

@@ -15,251 +15,216 @@ Provides pre-configured training setups for different scenarios:
 
 CONFIGS = {
     # Quick test for debugging (1-2 hours)
-    'quick_test': {
-        'ENV_MAX_MOVES': 200,
-        'NO_PROGRESS_PLIES': 80,
-        'DRAW_PENALTY': 0.0,
-        'MCTS_DRAW_VALUE': 0.0,
-        'NUM_ITERATIONS': 10,
-        'GAMES_PER_ITERATION': 10,
-        'TRAIN_EPOCHS': 5,
-        'MCTS_SIMULATIONS': 50,
-        'BATCH_SIZE': 128,
-        'BUFFER_SIZE': 2000,
-        'description': 'Fast testing configuration (1-2 hours)'
+    "quick_test": {
+        "ENV_MAX_MOVES": 200,
+        "NO_PROGRESS_PLIES": 80,
+        "DRAW_PENALTY": 0.0,
+        "MCTS_DRAW_VALUE": 0.0,
+        "NUM_ITERATIONS": 10,
+        "GAMES_PER_ITERATION": 10,
+        "TRAIN_EPOCHS": 5,
+        "MCTS_SIMULATIONS": 50,
+        "BATCH_SIZE": 128,
+        "BUFFER_SIZE": 2000,
+        "description": "Fast testing configuration (1-2 hours)",
     },
-    
     # Standard training (OPTIMIZED FOR RTX 2060 + CHECKERS)
-    'standard': {
-        'ENV_MAX_MOVES': 200,
-        'NO_PROGRESS_PLIES': 80,
-        'DRAW_PENALTY': 0.0,         # Pure zero-sum
-        'MCTS_DRAW_VALUE': 0.0,      # Pure zero-sum
-        'NUM_ITERATIONS': 100,
-        'GAMES_PER_ITERATION': 12,
-        'TRAIN_EPOCHS': 10,
-        'MCTS_SIMULATIONS': 800,    
-        'BATCH_SIZE': 256,          
-        'BUFFER_SIZE': 20000,       # INCREASED: Prevents forgetting wins
-        'description': 'Optimized Checkers training (High Quality)'
+    "standard": {
+        "ENV_MAX_MOVES": 200,
+        "NO_PROGRESS_PLIES": 80,
+        "DRAW_PENALTY": 0.0,  # Pure zero-sum
+        "MCTS_DRAW_VALUE": 0.0,  # Pure zero-sum
+        "NUM_ITERATIONS": 100,
+        "GAMES_PER_ITERATION": 12,
+        "TRAIN_EPOCHS": 10,
+        "MCTS_SIMULATIONS": 800,
+        "BATCH_SIZE": 256,
+        "BUFFER_SIZE": 20000,  # INCREASED: Prevents forgetting wins
+        "description": "Optimized Checkers training (High Quality)",
     },
-    
     # YOUR ORIGINAL PHASED STRATEGY (Kept as requested)
-    'phased_curriculum': {
+    "phased_curriculum": {
         # GLOBAL SETTINGS
-        'BUFFER_SIZE': 60000,  
-        'BATCH_SIZE': 256,     # Good for RTX 2060
-        'TRAIN_EPOCHS': 10,    
-        'NUM_ITERATIONS': 200,
-        'GAMES_PER_ITERATION': 20, 
-
-        'description': 'Fresh Start Optimized: High Volume -> High Depth',
-
-        'phases': [
+        "BUFFER_SIZE": 60000,
+        "BATCH_SIZE": 256,  # Good for RTX 2060
+        "TRAIN_EPOCHS": 10,
+        "NUM_ITERATIONS": 200,
+        "GAMES_PER_ITERATION": 20,
+        "description": "Fresh Start Optimized: High Volume -> High Depth",
+        "phases": [
             # Phase A
             {
-                'name': 'Phase A: Mechanics (Fast & Noisy)',
-                'iter_start': 1,
-                'iter_end': 25,
-                'MCTS_SIMULATIONS': 150, 
-                'DIRICHLET_EPSILON': 0.35, 
-                'TEMP_THRESHOLD': 30,       
-                'NO_PROGRESS_PLIES': 40,    
-                'ENV_MAX_MOVES': 80,
-                'DRAW_PENALTY': 0.0,
-                'MCTS_DRAW_VALUE': 0.0,
-                'MCTS_SEARCH_DRAW_BIAS': -0.10, 
+                "name": "Phase A: Mechanics (Fast & Noisy)",
+                "iter_start": 1,
+                "iter_end": 25,
+                "MCTS_SIMULATIONS": 150,
+                "DIRICHLET_EPSILON": 0.35,
+                "TEMP_THRESHOLD": 30,
+                "NO_PROGRESS_PLIES": 40,
+                "ENV_MAX_MOVES": 80,
+                "DRAW_PENALTY": 0.0,
+                "MCTS_DRAW_VALUE": 0.0,
+                "MCTS_SEARCH_DRAW_BIAS": -0.10,
             },
             # Phase B
             {
-                'name': 'Phase B: Aggression (Anti-Draw)',
-                'iter_start': 26,
-                'iter_end': 100,
-                'MCTS_SIMULATIONS': 800,    
-                'DIRICHLET_EPSILON': 0.3,
-                'TEMP_THRESHOLD': 30,
-                'NO_PROGRESS_PLIES': 60,
-                'ENV_MAX_MOVES': 120,
-                'DRAW_PENALTY': 0.0,      
-                'MCTS_DRAW_VALUE': 0.0,   
-                'MCTS_SEARCH_DRAW_BIAS': -0.25, 
+                "name": "Phase B: Aggression (Anti-Draw)",
+                "iter_start": 26,
+                "iter_end": 100,
+                "MCTS_SIMULATIONS": 800,
+                "DIRICHLET_EPSILON": 0.3,
+                "TEMP_THRESHOLD": 30,
+                "NO_PROGRESS_PLIES": 60,
+                "ENV_MAX_MOVES": 120,
+                "DRAW_PENALTY": 0.0,
+                "MCTS_DRAW_VALUE": 0.0,
+                "MCTS_SEARCH_DRAW_BIAS": -0.25,
             },
             # Phase C
             {
-                'name': 'Phase C: Deep Thought (Endgames)',
-                'iter_start': 101,
-                'iter_end': 200,
-                'MCTS_SIMULATIONS': 800,    
-                'DIRICHLET_EPSILON': 0.15,
-                'TEMP_THRESHOLD': 12,       
-                'NO_PROGRESS_PLIES': 100,
-                'ENV_MAX_MOVES': 200,       
-                'DRAW_PENALTY': 0.0,
-                'MCTS_DRAW_VALUE': 0.0,
-                'MCTS_SEARCH_DRAW_BIAS': -0.15, 
+                "name": "Phase C: Deep Thought (Endgames)",
+                "iter_start": 101,
+                "iter_end": 200,
+                "MCTS_SIMULATIONS": 800,
+                "DIRICHLET_EPSILON": 0.15,
+                "TEMP_THRESHOLD": 12,
+                "NO_PROGRESS_PLIES": 100,
+                "ENV_MAX_MOVES": 200,
+                "DRAW_PENALTY": 0.0,
+                "MCTS_DRAW_VALUE": 0.0,
+                "MCTS_SEARCH_DRAW_BIAS": -0.15,
             },
-        ]
+        ],
     },
-
     # ====================================================================
     # NEW: LOCAL RESUME CONFIG (For Continuing Cloud Runs on RTX 2060)
     # ====================================================================
     #'madras_local_resume': {
-     #   'description': 'Resuming Madras strategy on Local RTX 2060',
-        
-        # --- VOLUME SETTINGS ---
-        #'NUM_ITERATIONS': 500,     # Continue the marathon
-        
-        # DOWNGRADED FOR LOCAL HARDWARE:
-        # 1. 256 Batch (vs 1024/4096 on Cloud) to fit 6GB VRAM
-        # 2. 20 Games (vs 64 on Cloud) to fit i7 CPU
-        #'BATCH_SIZE': 256,         
-       # 'GAMES_PER_ITERATION': 20, 
-        
-        # KEEP STRATEGY CONSISTENT WITH CLOUD:
-        #'MCTS_SIMULATIONS': 600,    # Speed strategy
-     #   'C_PUCT': 1.5,             # High exploration
-      #  'BUFFER_SIZE': 75000,      # Keep large buffer
-       # 'TRAIN_EPOCHS': 10,        # Standard training intensity
-        #'LR': 0.002,
-        
-        # --- LOGIC ---
-       # 'DRAW_PENALTY': 0.0,
-        #'MCTS_DRAW_VALUE': 0.0,
-        #'MCTS_SEARCH_DRAW_BIAS': -0.05,
-        
-      #  'DIRICHLET_EPSILON': 0.20,
-       # 'TEMP_THRESHOLD': 30,
-        
-       # 'NO_PROGRESS_PLIES': 50,
-       # 'ENV_MAX_MOVES': 110,
-    #}TILL ITER 142
-
-    'madras_local_resume': {
-        'description': 'Phase 2: Wide Vision & Trap Setting (Iter 142+)',
-        
+    #   'description': 'Resuming Madras strategy on Local RTX 2060',
+    # --- VOLUME SETTINGS ---
+    #'NUM_ITERATIONS': 500,     # Continue the marathon
+    # DOWNGRADED FOR LOCAL HARDWARE:
+    # 1. 256 Batch (vs 1024/4096 on Cloud) to fit 6GB VRAM
+    # 2. 20 Games (vs 64 on Cloud) to fit i7 CPU
+    #'BATCH_SIZE': 256,
+    # 'GAMES_PER_ITERATION': 20,
+    # KEEP STRATEGY CONSISTENT WITH CLOUD:
+    #'MCTS_SIMULATIONS': 600,    # Speed strategy
+    #   'C_PUCT': 1.5,             # High exploration
+    #  'BUFFER_SIZE': 75000,      # Keep large buffer
+    # 'TRAIN_EPOCHS': 10,        # Standard training intensity
+    #'LR': 0.002,
+    # --- LOGIC ---
+    # 'DRAW_PENALTY': 0.0,
+    #'MCTS_DRAW_VALUE': 0.0,
+    #'MCTS_SEARCH_DRAW_BIAS': -0.05,
+    #  'DIRICHLET_EPSILON': 0.20,
+    # 'TEMP_THRESHOLD': 30,
+    # 'NO_PROGRESS_PLIES': 50,
+    # 'ENV_MAX_MOVES': 110,
+    # }TILL ITER 142
+    "madras_local_resume": {
+        "description": "Phase 2: Wide Vision & Trap Setting (Iter 142+)",
         # --- VOLUME ---
-        'NUM_ITERATIONS': 500,
-        'GAMES_PER_ITERATION': 20,# WAS 20 UNTIL 175 
-        
+        "NUM_ITERATIONS": 500,
+        "GAMES_PER_ITERATION": 20,  # WAS 20 UNTIL 175
         # --- BRAIN ---
-        'MCTS_SIMULATIONS': 800,    # WAS 600 UNTIL 175 
-        
+        "MCTS_SIMULATIONS": 800,  # WAS 600 UNTIL 175
         # --- TRAINING ---
-        'BATCH_SIZE': 256,         
-        'BUFFER_SIZE': 50000,      
-        'TRAIN_EPOCHS': 10,        
-        'LR': 0.001,               # WAS 0.002 UNTIL 175
-        
+        "BATCH_SIZE": 256,
+        "BUFFER_SIZE": 50000,
+        "TRAIN_EPOCHS": 10,
+        "LR": 0.001,  # WAS 0.002 UNTIL 175
         # --- MCTS LOGIC (THE HACK) ---
-        'C_PUCT': 1.5,             
-        'DIRICHLET_ALPHA': 1,    # WAS 0.2 UNTIL 155 AND 1 UNTIL 175 
-        'DIRICHLET_EPSILON': 0.25, # Stronger noise to break tunnel vision
-        'TEMP_THRESHOLD': 50,# WAS 50 UNTIL 175
-        
+        "C_PUCT": 1.5,
+        "DIRICHLET_ALPHA": 1,  # WAS 0.2 UNTIL 155 AND 1 UNTIL 175
+        "DIRICHLET_EPSILON": 0.25,  # Stronger noise to break tunnel vision
+        "TEMP_THRESHOLD": 50,  # WAS 50 UNTIL 175
         # --- AGGRESSION ---
-        'DRAW_PENALTY': 0.0,
-        'MCTS_DRAW_VALUE': 0.0,
-        'MCTS_SEARCH_DRAW_BIAS': -0.30, # Your requested bias
-        
+        "DRAW_PENALTY": 0.0,
+        "MCTS_DRAW_VALUE": 0.0,
+        "MCTS_SEARCH_DRAW_BIAS": -0.30,  # Your requested bias
         # --- SPEED ---
-        'NO_PROGRESS_PLIES': 50,
-        'ENV_MAX_MOVES': 110,
+        "NO_PROGRESS_PLIES": 50,
+        "ENV_MAX_MOVES": 110,
     },
-    'era9_precision': {
-        'description': 'Iter 201+: 1600 Sims, LR 0.0002, PURE ALPHAZERO (No Bias)',
-        
+    "era9_precision": {
+        "description": "Iter 201+: 1600 Sims, LR 0.0002, PURE ALPHAZERO (No Bias)",
         # --- VOLUME (Quality > Quantity, but decent volume) ---
-        'NUM_ITERATIONS': 1000,    
-        'GAMES_PER_ITERATION': 16, # <--- Bumped to 16. We need data density.
-        'BATCH_SIZE': 256,
-        'BUFFER_SIZE': 50000,      
-        
+        "NUM_ITERATIONS": 1000,
+        "GAMES_PER_ITERATION": 16,  # <--- Bumped to 16. We need data density.
+        "BATCH_SIZE": 256,
+        "BUFFER_SIZE": 50000,
         # --- BRAIN (MAX POWER) ---
-        'MCTS_SIMULATIONS': 1600,  # <--- Grandmaster Depth
-        
+        "MCTS_SIMULATIONS": 1600,  # <--- Grandmaster Depth
         # --- PRECISION TRAINING ---
-        'TRAIN_EPOCHS': 10,        # <--- Keep at 10. Do NOT increase.
-        'LR': 0.0002,              # <--- Surgical Precision.
-        
+        "TRAIN_EPOCHS": 10,  # <--- Keep at 10. Do NOT increase.
+        "LR": 0.0002,  # <--- Surgical Precision.
         # --- LOGIC ---
-        'C_PUCT': 1.5,
-        'DIRICHLET_ALPHA': 0.5,    # <--- Low Noise. Trust the calculation.
-        'DIRICHLET_EPSILON': 0.15,
-        'TEMP_THRESHOLD': 30,      
-        
+        "C_PUCT": 1.5,
+        "DIRICHLET_ALPHA": 0.5,  # <--- Low Noise. Trust the calculation.
+        "DIRICHLET_EPSILON": 0.15,
+        "TEMP_THRESHOLD": 30,
         # --- PURE ZERO-SUM (The Critic's Fix) ---
-        'DRAW_PENALTY': 0.0,
-        'MCTS_DRAW_VALUE': 0.0,
-        'MCTS_SEARCH_DRAW_BIAS': 0.0, # <--- REMOVED. The Endgame Detector handles this now.
-        
+        "DRAW_PENALTY": 0.0,
+        "MCTS_DRAW_VALUE": 0.0,
+        "MCTS_SEARCH_DRAW_BIAS": 0.0,  # <--- REMOVED. The Endgame Detector handles this now.
         # --- SPEED ---
-        'NO_PROGRESS_PLIES': 50,
-        'ENV_MAX_MOVES': 110,
+        "NO_PROGRESS_PLIES": 50,
+        "ENV_MAX_MOVES": 110,
     },
-    'era10_sprint': {
-        'description': 'FINAL SPRINT: 1600 Sims, High LR, Aggressive Bias',
-        
+    "era10_sprint": {
+        "description": "FINAL SPRINT: 1600 Sims, High LR, Aggressive Bias",
         # --- MAX SPEED ---
-        'NUM_ITERATIONS': 500,
-        'GAMES_PER_ITERATION': 16, 
-        'BATCH_SIZE': 256,
-        'BUFFER_SIZE': 50000,
-        
+        "NUM_ITERATIONS": 500,
+        "GAMES_PER_ITERATION": 16,
+        "BATCH_SIZE": 256,
+        "BUFFER_SIZE": 50000,
         # --- BRAIN ---
-        'MCTS_SIMULATIONS': 1600,  # Keep the High IQ
-        
+        "MCTS_SIMULATIONS": 1600,  # Keep the High IQ
         # --- AGGRESSIVE LEARNING (The Fix) ---
-        'TRAIN_EPOCHS': 10,
-        'LR': 0.001,               # <--- INCREASED (Was 0.0002). Learn FAST.
-        
+        "TRAIN_EPOCHS": 10,
+        "LR": 0.001,  # <--- INCREASED (Was 0.0002). Learn FAST.
         # --- LOGIC ---
-        'C_PUCT': 1.5,
-        'DIRICHLET_ALPHA': 0.8,    # Focused noise
-        'DIRICHLET_EPSILON': 0.25,
-        'TEMP_THRESHOLD': 30,
-        
+        "C_PUCT": 1.5,
+        "DIRICHLET_ALPHA": 0.8,  # Focused noise
+        "DIRICHLET_EPSILON": 0.25,
+        "TEMP_THRESHOLD": 30,
         # --- AGGRESSION ---
-        'DRAW_PENALTY': 0.0,
-        'MCTS_DRAW_VALUE': 0.0,
-        'MCTS_SEARCH_DRAW_BIAS': -0.15, # <--- RE-ADDED. Force it to fight.
-        
+        "DRAW_PENALTY": 0.0,
+        "MCTS_DRAW_VALUE": 0.0,
+        "MCTS_SEARCH_DRAW_BIAS": -0.15,  # <--- RE-ADDED. Force it to fight.
         # --- SPEED ---
-        'NO_PROGRESS_PLIES': 50,
-        'ENV_MAX_MOVES': 110,
+        "NO_PROGRESS_PLIES": 50,
+        "ENV_MAX_MOVES": 110,
     },
-    'cpu_endgame_finisher': {
-        'description': 'CPU Optimized (8 Workers): High Depth (1200), Precision Endgames',
-        
+    "cpu_endgame_finisher": {
+        "description": "CPU Optimized (8 Workers): High Depth (1200), Precision Endgames",
         # --- VOLUME (Tuned for 8 Workers) ---
-        'NUM_ITERATIONS': 1000,
-        'GAMES_PER_ITERATION': 16, # 16 games / 8 workers = 2 games each. Perfect balance.
-        'BATCH_SIZE': 256,         # Smaller batches are faster on CPU cache
-        'BUFFER_SIZE': 60000,      # Keep remembering old wins
-        
+        "NUM_ITERATIONS": 1000,
+        "GAMES_PER_ITERATION": 16,  # 16 games / 8 workers = 2 games each. Perfect balance.
+        "BATCH_SIZE": 256,  # Smaller batches are faster on CPU cache
+        "BUFFER_SIZE": 60000,  # Keep remembering old wins
         # --- BRAIN (The "See Further" Fix) ---
-        'MCTS_SIMULATIONS': 1600,  # Deep search to find forced checkmates
-        
+        "MCTS_SIMULATIONS": 1600,  # Deep search to find forced checkmates
         # --- PRECISION TRAINING (Fix "Sucks at the end") ---
-        'TRAIN_EPOCHS': 10,
-        'LR': 0.0002,              # Low LR to fine-tune weights without breaking knowledge
-        
+        "TRAIN_EPOCHS": 10,
+        "LR": 0.0002,  # Low LR to fine-tune weights without breaking knowledge
         # --- LOGIC & EXPLORATION ---
-        'C_PUCT': 2.0,             # Higher value helps it explore wider branches in deep searches
-        'DIRICHLET_ALPHA': 0.3,    # Standard noise (Was 1.0 - too chaotic)
-        'DIRICHLET_EPSILON': 0.15, # Reduced noise influence. Trust the calculation more.
-        'TEMP_THRESHOLD': 20,      # Switch to "Play to Win" (Temperature 0) much earlier
-        
+        "C_PUCT": 2.0,  # Higher value helps it explore wider branches in deep searches
+        "DIRICHLET_ALPHA": 0.3,  # Standard noise (Was 1.0 - too chaotic)
+        "DIRICHLET_EPSILON": 0.15,  # Reduced noise influence. Trust the calculation more.
+        "TEMP_THRESHOLD": 20,  # Switch to "Play to Win" (Temperature 0) much earlier
         # --- DRAW HANDLING (Fix Bias) ---
-        'DRAW_PENALTY': 0.0,
-        'MCTS_DRAW_VALUE': 0.0,
-        'MCTS_SEARCH_DRAW_BIAS': -0.05, # Mild penalty. -0.30 was causing it to suicide to avoid draws.
-        
+        "DRAW_PENALTY": 0.0,
+        "MCTS_DRAW_VALUE": 0.0,
+        "MCTS_SEARCH_DRAW_BIAS": -0.05,  # Mild penalty. -0.30 was causing it to suicide to avoid draws.
         # --- ANTI-STUCK MECHANISMS ---
-        'NO_PROGRESS_PLIES': 100,  # Give it time to maneuver kings without hitting the limit
-        'ENV_MAX_MOVES': 200,
+        "NO_PROGRESS_PLIES": 100,  # Give it time to maneuver kings without hitting the limit
+        "ENV_MAX_MOVES": 200,
     },
 }
+
 
 def print_config(config_name: str):
     """Print configuration details."""
@@ -267,7 +232,7 @@ def print_config(config_name: str):
         print(f"❌ Unknown configuration: {config_name}")
         print(f"Available: {', '.join(CONFIGS.keys())}")
         return
-    
+
     config = CONFIGS[config_name]
     print(f"\n{'='*70}")
     print(f"Configuration: {config_name.upper()}")
@@ -275,16 +240,16 @@ def print_config(config_name: str):
     print(f"Description: {config['description']}")
     print(f"\nSettings:")
     for key, value in config.items():
-        if key != 'description':
+        if key != "description":
             print(f"  {key}: {value}")
     print(f"{'='*70}\n")
 
 
 if __name__ == "__main__":
     import sys
-    
+
     print("AlphaZero Training Configurations\n")
-    
+
     if len(sys.argv) > 1:
         print_config(sys.argv[1])
     else:
@@ -292,6 +257,6 @@ if __name__ == "__main__":
         for name, config in CONFIGS.items():
             print(f"\n  {name}:")
             print(f"    {config['description']}")
-        
+
         print("\nUsage: python config_alphazero.py <config_name>")
         print("Example: python config_alphazero.py quick_test")
